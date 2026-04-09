@@ -1,8 +1,10 @@
+# Makefile for building MicroQuickJS as a WASI 0.2 Component
 WASI_SDK_PATH ?= /opt/wasi-sdk
 CC = $(WASI_SDK_PATH)/bin/clang
 CFLAGS = -Oz -D_WASI_EMULATED_SIGNAL -I. --sysroot=$(WASI_SDK_PATH)/share/wasi-sysroot
 LDFLAGS = -Wl,--no-entry \
           -Wl,--export=__wasm_export_exports_microquickjs_eval \
+          -Wl,--export=__wasm_export_exports_wasi_cli_run_run \
           -Wl,--export=cabi_realloc \
           -Wl,--export=__wasm_call_ctors \
           -lwasi-emulated-signal

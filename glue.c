@@ -74,34 +74,39 @@ static void ensure_runtime(void) {
     s_ctx = JS_NewContext(s_mem_buf, sizeof(s_mem_buf), &js_stdlib);
 }
 
-void exports_microquickjs_eval(microquickjs_string_t *code, microquickjs_string_t *ret) {
+static char *make_wasi_string(const char *src) {
+    if (!src) return NULL;
+    size_t len = strlen(src);
+    char *out = (char *)cabi_realloc(NULL, 0, 1, len);
+    if (!out) return NULL;
+    memcpy(out, src, len);
+    return out;
+}
+
+bool exports_microquickjs_eval(microquickjs_string_t *code, microquickjs_string_t *ret, microquickjs_string_t *err) {
     ensure_runtime();
     char *src = malloc(code->len + 1);
     memcpy(src, code->ptr, code->len);
     src[code->len] = '\0';
-
-    /* Using JS_EVAL_RETVAL to ensure the result of the last expression is returned */
     JSValue val = JS_Eval(s_ctx, src, code->len, "<eval>", JS_EVAL_RETVAL);
     free(src);
-
-    const char *result_cstr;
-    JSCStringBuf sbuf;
     if (JS_IsException(val)) {
         JSValue exc = JS_GetException(s_ctx);
+        const char *result_cstr;
+        JSCStringBuf sbuf;
         result_cstr = JS_ToCString(s_ctx, exc, &sbuf);
-        size_t elen = strlen(result_cstr) + 8;
-        char *ebuf = cabi_realloc(NULL, 0, 1, elen);
-        snprintf(ebuf, elen, "Error: %s", result_cstr);
-        ret->ptr = (uint8_t *)ebuf;
-        ret->len = strlen(ebuf);
-        return;
+        err->ptr = (uint8_t *)make_wasi_string(result_cstr);
+        err->len = strlen(result_cstr);
+        return false;
     }
-
+    const char *result_cstr;
+    JSCStringBuf sbuf;
     result_cstr = JS_ToCString(s_ctx, val, &sbuf);
-    size_t len = strlen(result_cstr);
-    char  *out = cabi_realloc(NULL, 0, 1, len + 1);
-    memcpy(out, result_cstr, len + 1);
+    ret->ptr = (uint8_t *)make_wasi_string(result_cstr);
+    ret->len = strlen(result_cstr);
+    return true;
+}
 
-    ret->ptr = (uint8_t *)out;
-    ret->len = len;
+bool exports_wasi_cli_run_run(void) {
+    return true;
 }
