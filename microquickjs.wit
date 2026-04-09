@@ -1,6 +1,4 @@
 package local:microquickjs;
-
 world microquickjs {
-    include wasi:cli/command@0.2.0;
     export eval: func(code: string) -> string;
 }

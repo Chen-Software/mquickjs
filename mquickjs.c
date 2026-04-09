@@ -18322,3 +18322,4 @@ JSValue js_string_search(JSContext *ctx, JSValue *this_val,
 {
     return js_regexp_exec(ctx, &argv[0], 1, this_val, MAGIC_REGEXP_SEARCH);
 }
+/* WASI PATCH */

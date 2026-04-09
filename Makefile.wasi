@@ -6,34 +6,51 @@ HOST_CC = gcc
 HOST_CFLAGS = -Wall -O2 -I.
 HOST_LDFLAGS = -lm
 
-# Note: setjmp/longjmp in WASI currently requires -mllvm -wasm-enable-sjlj
-# and a compatible runtime. Aggressive size optimization with -Oz.
-CFLAGS = --target=wasm32-wasi --sysroot=$(SYSROOT) -Oz -D_WASI_EMULATED_SIGNAL -D_WASI_EMULATED_PROCESS_CLOCKS -I. -mllvm -wasm-enable-sjlj
-LDFLAGS = -lwasi-emulated-signal -lwasi-emulated-process-clocks
+# setjmp/longjmp support
+SJLJ_FLAGS = -mllvm -wasm-enable-sjlj
+
+CFLAGS = --target=wasm32-wasi --sysroot=$(SYSROOT) -Oz -D_WASI_EMULATED_SIGNAL -I. $(SJLJ_FLAGS)
+LDFLAGS = -lwasi-emulated-signal -lwasi-emulated-process-clocks -lsetjmp
 LIBS = -lm
 
-MQJS_OBJS = mqjs.o readline_tty.o readline.o mquickjs.o dtoa.o libm.o cutils.o
+CORE_OBJS = mquickjs.o cutils.o dtoa.o libm.o microquickjs.o glue.o
+WIT_BINDGEN = wit-bindgen
+WASM_TOOLS = wasm-tools
+ADAPTER ?= /opt/wasi_snapshot_preview1.reactor.wasm
 
-all: mqjs.wasm
+all: microquickjs.component.wasm
 
 mquickjs_build_native: mqjs_stdlib.c mquickjs_build.c
 	$(HOST_CC) $(HOST_CFLAGS) -o $@ $^ $(HOST_LDFLAGS)
 
-mquickjs_atom.h: mquickjs_build_native
-	./mquickjs_build_native -m32 -a > $@
-
 mqjs_stdlib.h: mquickjs_build_native
 	./mquickjs_build_native -m32 > $@
 
-# Dependencies on generated headers
-mquickjs.o: mquickjs_atom.h
-mqjs.o: mqjs_stdlib.h
+mquickjs_atom.h: mquickjs_build_native
+	./mquickjs_build_native -m32 -a > $@
 
-mqjs.wasm: $(MQJS_OBJS)
-	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS) $(LIBS)
+microquickjs.h microquickjs.c: microquickjs.wit
+	$(WIT_BINDGEN) c ./microquickjs.wit --world microquickjs
+
+# Dependencies
+mquickjs.o: mquickjs_atom.h
+glue.o: microquickjs.h mqjs_stdlib.h
+
+core.wasm: $(CORE_OBJS) microquickjs_component_type.o
+	$(CC) $(CFLAGS) -Wl,--no-entry \
+		-Wl,--export=exports_microquickjs_eval \
+		-Wl,--export=cabi_realloc \
+		-Wl,--export=__wasm_call_ctors \
+		-o $@ $^ $(LDFLAGS) $(LIBS)
+
+microquickjs.component.wasm: core.wasm microquickjs.wit
+	$(WASM_TOOLS) component embed ./microquickjs.wit core.wasm --world microquickjs --output embedded.wasm
+	$(WASM_TOOLS) component new embedded.wasm --adapt $(ADAPTER) --output $@
 
 %.o: %.c
 	$(CC) $(CFLAGS) -c -o $@ $<
 
 clean:
-	rm -f *.o mqjs.wasm mquickjs_build_native mquickjs_atom.h mqjs_stdlib.h
+	rm -f *.o mqjs.wasm core.wasm embedded.wasm microquickjs.component.wasm \
+	mquickjs_build_native mquickjs_atom.h mqjs_stdlib.h \
+	microquickjs.c microquickjs.h
