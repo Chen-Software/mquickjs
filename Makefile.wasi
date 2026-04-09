@@ -39,7 +39,6 @@ $(BUILD_DIR)/glue.o: glue.c | $(BUILD_DIR) $(GEN_DIR)/microquickjs.c
 $(BUILD_DIR)/core.wasm: $(OBJS) $(GEN_DIR)/microquickjs_component_type.o
 	$(CC) $(CFLAGS) \
 		-Wl,--no-entry \
-		-Wl,--export=exports_microquickjs_eval \
 		-Wl,--export=cabi_realloc \
 		-Wl,--export=__wasm_call_ctors \
 		-o $@ $^ -lwasi-emulated-signal -lwasi-emulated-process-clocks -lsetjmp -lm
