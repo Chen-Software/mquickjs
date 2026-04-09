@@ -1,0 +1,5 @@
+*.o
+mqjs.wasm
+mquickjs_build_native
+mqjs_stdlib.h
+mquickjs_atom.h

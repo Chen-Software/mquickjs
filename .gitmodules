@@ -1,3 +1,6 @@
 [submodule "packages/wasi-sdk"]
 	path = packages/wasi-sdk
 	url = https://github.com/WebAssembly/wasi-sdk.git
+[submodule "packages/WasmEdge"]
+	path = packages/WasmEdge
+	url = https://github.com/WasmEdge/WasmEdge.git
