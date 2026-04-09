@@ -1,27 +1,57 @@
 WASI_SDK_PATH ?= /opt/wasi-sdk
 CC = $(WASI_SDK_PATH)/bin/clang
-SYSROOT = $(WASI_SDK_PATH)/share/wasi-sysroot
+AR = $(WASI_SDK_PATH)/bin/llvm-ar
+CFLAGS = -Oz -D_WASI_EMULATED_SIGNAL -Werror=implicit-function-declaration -I. -mllvm -wasm-enable-sjlj
 
-HOST_CC = gcc
-HOST_CFLAGS = -Wall -O2 -I.
-HOST_LDFLAGS = -lm
+BUILD_DIR = build
+GEN_DIR = generated
 
-# setjmp/longjmp support
-SJLJ_FLAGS = -mllvm -wasm-enable-sjlj
+OBJS = \
+	$(BUILD_DIR)/mquickjs.o \
+	$(BUILD_DIR)/cutils.o \
+	$(BUILD_DIR)/dtoa.o \
+	$(BUILD_DIR)/libm.o \
+	$(BUILD_DIR)/microquickjs.o \
+	$(BUILD_DIR)/glue.o
 
-CFLAGS = --target=wasm32-wasi --sysroot=$(SYSROOT) -Oz -D_WASI_EMULATED_SIGNAL -I. $(SJLJ_FLAGS)
-LDFLAGS = -lwasi-emulated-signal -lwasi-emulated-process-clocks -lsetjmp
-LIBS = -lm
-
-CORE_OBJS = mquickjs.o cutils.o dtoa.o libm.o microquickjs.o glue.o
 WIT_BINDGEN = wit-bindgen
 WASM_TOOLS = wasm-tools
 ADAPTER ?= /opt/wasi_snapshot_preview1.reactor.wasm
 
-all: microquickjs.component.wasm
+all: $(BUILD_DIR)/microquickjs.component.wasm
+
+$(BUILD_DIR):
+	mkdir -p $(BUILD_DIR)
+
+$(GEN_DIR)/microquickjs.c: microquickjs.wit
+	mkdir -p $(GEN_DIR)
+	$(WIT_BINDGEN) c ./microquickjs.wit --out-dir ./$(GEN_DIR) --world microquickjs
+
+$(BUILD_DIR)/%.o: %.c | $(BUILD_DIR)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/microquickjs.o: $(GEN_DIR)/microquickjs.c | $(BUILD_DIR)
+	$(CC) $(CFLAGS) -I$(GEN_DIR) -c $< -o $@
+
+$(BUILD_DIR)/glue.o: glue.c | $(BUILD_DIR) $(GEN_DIR)/microquickjs.c
+	$(CC) $(CFLAGS) -I$(GEN_DIR) -c $< -o $@
+
+$(BUILD_DIR)/core.wasm: $(OBJS) $(GEN_DIR)/microquickjs_component_type.o
+	$(CC) $(CFLAGS) \
+		-Wl,--no-entry \
+		-Wl,--export=exports_microquickjs_eval \
+		-Wl,--export=cabi_realloc \
+		-Wl,--export=__wasm_call_ctors \
+		-o $@ $^ -lwasi-emulated-signal -lwasi-emulated-process-clocks -lsetjmp -lm
+
+$(BUILD_DIR)/embedded.wasm: $(BUILD_DIR)/core.wasm microquickjs.wit
+	$(WASM_TOOLS) component embed ./microquickjs.wit $< --world microquickjs --output $@
+
+$(BUILD_DIR)/microquickjs.component.wasm: $(BUILD_DIR)/embedded.wasm
+	$(WASM_TOOLS) component new $< --adapt $(ADAPTER) --output $@
 
 mquickjs_build_native: mqjs_stdlib.c mquickjs_build.c
-	$(HOST_CC) $(HOST_CFLAGS) -o $@ $^ $(HOST_LDFLAGS)
+	gcc -O2 -I. -o $@ $^ -lm
 
 mqjs_stdlib.h: mquickjs_build_native
 	./mquickjs_build_native -m32 > $@
@@ -29,28 +59,9 @@ mqjs_stdlib.h: mquickjs_build_native
 mquickjs_atom.h: mquickjs_build_native
 	./mquickjs_build_native -m32 -a > $@
 
-microquickjs.h microquickjs.c: microquickjs.wit
-	$(WIT_BINDGEN) c ./microquickjs.wit --world microquickjs
-
-# Dependencies
+# Headers depend on native build
 mquickjs.o: mquickjs_atom.h
-glue.o: microquickjs.h mqjs_stdlib.h
-
-core.wasm: $(CORE_OBJS) microquickjs_component_type.o
-	$(CC) $(CFLAGS) -Wl,--no-entry \
-		-Wl,--export=exports_microquickjs_eval \
-		-Wl,--export=cabi_realloc \
-		-Wl,--export=__wasm_call_ctors \
-		-o $@ $^ $(LDFLAGS) $(LIBS)
-
-microquickjs.component.wasm: core.wasm microquickjs.wit
-	$(WASM_TOOLS) component embed ./microquickjs.wit core.wasm --world microquickjs --output embedded.wasm
-	$(WASM_TOOLS) component new embedded.wasm --adapt $(ADAPTER) --output $@
-
-%.o: %.c
-	$(CC) $(CFLAGS) -c -o $@ $<
+glue.o: mqjs_stdlib.h
 
 clean:
-	rm -f *.o mqjs.wasm core.wasm embedded.wasm microquickjs.component.wasm \
-	mquickjs_build_native mquickjs_atom.h mqjs_stdlib.h \
-	microquickjs.c microquickjs.h
+	rm -rf $(BUILD_DIR) $(GEN_DIR) mquickjs_build_native mqjs_stdlib.h mquickjs_atom.h

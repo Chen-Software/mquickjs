@@ -4,7 +4,7 @@
 #include "microquickjs.h"
 #include "mquickjs.h"
 
-// cabi_realloc is defined/expected by wit-bindgen
+// cabi_realloc is provided by wit-bindgen runtime
 void *cabi_realloc(void *ptr, size_t old_size, size_t align, size_t new_size);
 
 // Stubs for functions used in mqjs_stdlib.h
@@ -20,39 +20,46 @@ JSValue js_clearTimeout(JSContext *ctx, JSValue *this_val, int argc, JSValue *ar
 
 static JSContext *ctx = NULL;
 
-void exports_microquickjs_eval(microquickjs_string_t *code, microquickjs_string_t *ret) {
+bool exports_microquickjs_eval(microquickjs_string_t *code, microquickjs_string_t *ok, microquickjs_string_t *err) {
     if (ctx == NULL) {
         size_t mem_size = 16 << 20;
         uint8_t *mem_buf = malloc(mem_size);
         ctx = JS_NewContext(mem_buf, mem_size, &js_stdlib);
     }
 
-    JSValue val = JS_Eval(ctx, (const char *)code->ptr, code->len, "<eval>", 0);
+    // Convert WIT string to null-terminated C string
+    char *src = malloc(code->len + 1);
+    memcpy(src, code->ptr, code->len);
+    src[code->len] = '\0';
+
+    JSValue val = JS_Eval(ctx, src, code->len, "<eval>", 0);
+    free(src);
 
     const char *result_str = NULL;
-    char *error_prefix = "";
 
     if (JS_IsException(val)) {
-        JSValue err = JS_GetException(ctx);
+        JSValue exc = JS_GetException(ctx);
         JSCStringBuf buf;
-        result_str = JS_ToCString(ctx, err, &buf);
-        error_prefix = "Error: ";
+        result_str = JS_ToCString(ctx, exc, &buf);
+
+        size_t elen = strlen(result_str) + 8;
+        char *ebuf = cabi_realloc(NULL, 0, 1, elen);
+        snprintf(ebuf, elen, "Error: %s", result_str);
+
+        err->ptr = (uint8_t *)ebuf;
+        err->len = strlen(ebuf);
+        return false; // Result is false for error
     } else {
         JSCStringBuf buf;
         result_str = JS_ToCString(ctx, val, &buf);
+        if (!result_str) result_str = "undefined";
+
+        size_t len = strlen(result_str);
+        char *out = cabi_realloc(NULL, 0, 1, len + 1);
+        memcpy(out, result_str, len + 1);
+
+        ok->ptr = (uint8_t *)out;
+        ok->len = len;
+        return true; // Result is true for success
     }
-
-    if (!result_str) result_str = "undefined";
-
-    size_t prefix_len = strlen(error_prefix);
-    size_t str_len = strlen(result_str);
-    size_t total_len = prefix_len + str_len;
-
-    uint8_t *out = cabi_realloc(NULL, 0, 1, total_len + 1);
-    memcpy(out, error_prefix, prefix_len);
-    memcpy(out + prefix_len, result_str, str_len);
-    out[total_len] = '\0';
-
-    ret->ptr = out;
-    ret->len = total_len;
 }

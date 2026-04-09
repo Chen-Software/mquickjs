@@ -6,5 +6,5 @@ microquickjs.component.wasm
 mquickjs_build_native
 mqjs_stdlib.h
 mquickjs_atom.h
-microquickjs.c
-microquickjs.h
+build/
+generated/
