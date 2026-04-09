@@ -1,0 +1,39 @@
+WASI_SDK_PATH ?= /opt/wasi-sdk
+CC = $(WASI_SDK_PATH)/bin/clang
+SYSROOT = $(WASI_SDK_PATH)/share/wasi-sysroot
+
+HOST_CC = gcc
+HOST_CFLAGS = -Wall -O2 -I.
+HOST_LDFLAGS = -lm
+
+# Note: setjmp/longjmp in WASI currently requires -mllvm -wasm-enable-sjlj
+# and a compatible runtime. Aggressive size optimization with -Oz.
+CFLAGS = --target=wasm32-wasi --sysroot=$(SYSROOT) -Oz -D_WASI_EMULATED_SIGNAL -D_WASI_EMULATED_PROCESS_CLOCKS -I. -mllvm -wasm-enable-sjlj
+LDFLAGS = -lwasi-emulated-signal -lwasi-emulated-process-clocks
+LIBS = -lm
+
+MQJS_OBJS = mqjs.o readline_tty.o readline.o mquickjs.o dtoa.o libm.o cutils.o
+
+all: mqjs.wasm
+
+mquickjs_build_native: mqjs_stdlib.c mquickjs_build.c
+	$(HOST_CC) $(HOST_CFLAGS) -o $@ $^ $(HOST_LDFLAGS)
+
+mquickjs_atom.h: mquickjs_build_native
+	./mquickjs_build_native -m32 -a > $@
+
+mqjs_stdlib.h: mquickjs_build_native
+	./mquickjs_build_native -m32 > $@
+
+# Dependencies on generated headers
+mquickjs.o: mquickjs_atom.h
+mqjs.o: mqjs_stdlib.h
+
+mqjs.wasm: $(MQJS_OBJS)
+	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS) $(LIBS)
+
+%.o: %.c
+	$(CC) $(CFLAGS) -c -o $@ $<
+
+clean:
+	rm -f *.o mqjs.wasm mquickjs_build_native mquickjs_atom.h mqjs_stdlib.h
