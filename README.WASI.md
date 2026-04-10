@@ -23,6 +23,12 @@ eval: func(code: string) -> result<string, string>;
 
 ## Limitations
 
+### WasmEdge 0.14.1 Validator Bug
+
+WasmEdge 0.14.1 contains a known issue where its Component Model validator incorrectly rejects spec-compliant components with error `0x50b (malformed name)`.
+The generated component is fully spec-compliant and passes validation via `wasm-tools`.
+- **Recommendation:** Use **Wasmtime** for execution, or downgrade WasmEdge to **0.13.5** until a fix is released in WasmEdge.
+
 ### Error Handling (setjmp/longjmp)
 
 MicroQuickJS uses `setjmp`/`longjmp` for error handling during parsing (e.g., syntax errors).
