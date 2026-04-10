@@ -2,8 +2,8 @@
 
 ## Environment
 - **WASI SDK**: 25.0 (llvm 19.1.5)
-- **Wasmtime**: 43.0.0
-- **WasmEdge**: 0.14.1 (Experimental)
+- **Wasmtime**: 43.0.0 (Verified - Reference Implementation)
+- **WasmEdge**: 0.14.1, 0.17.0-alpha.1 (Tested)
 - **wit-bindgen**: 0.55.0
 
 ## Verification Status (Wasmtime v43)
@@ -13,9 +13,10 @@
 - **WASI 0.2 wall-clock**: ✅ PASS
 - **Error Handling**: ✅ PASS (JavaScript exceptions are caught and returned as `err(string)`)
 
-## Known Limitations
-- **WasmEdge**: Version 0.14.1 fails with `0x50b` error due to Component Model maturity. Use Wasmtime for full support.
-- **SJLJ**: Standard Wasm Exception Handling proposal is used for `setjmp`/`longjmp` stubs.
+## Runtime Compatibility
+- **Wasmtime v43**: ✅ Full support for WASI 0.2 and Component Model.
+- **WasmEdge v0.14.1**: ❌ Fails with `0x50b` (malformed name) during validation.
+- **WasmEdge v0.17.0-alpha.1**: ❌ Fails with `instantiation failed: unknown import (wasi:cli/environment@0.2.3)`. Component model support is still experimental in WasmEdge.
 
 ## Test Commands
 ```bash
