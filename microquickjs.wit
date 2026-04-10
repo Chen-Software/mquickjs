@@ -1,7 +1,5 @@
-package local:microquickjs;
+package metascript:microquickjs;
 
 world microquickjs {
-    /// Evaluate JavaScript code and return result as string.
-    /// On error (syntax, runtime), returns Err(error-message).
     export eval: func(code: string) -> result<string, string>;
 }

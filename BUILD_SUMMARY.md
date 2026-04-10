@@ -20,7 +20,7 @@
 
 ## Known Runtime Limitations
 - **Wasmtime v29.0.1:** Fails to parse the module with `exceptions proposal not enabled` at the `tags` section offset, despite `-W all-proposals=y`. This appears to be a regression or limitation in component-level exception handling support in this version.
-- **WasmEdge v0.14.1:** Fails with `malformed name` (Code: 0x50b) when using `wasmedge run --enable-all`. This indicates ongoing stabilization of the Component Model parser for WASI 0.2.
+- **WasmEdge v0.14.1:** Fails with `malformed name (Code: 0x50b)` when using `wasmedge run --enable-all`. This indicates ongoing stabilization of the Component Model parser for WASI 0.2.
 
 ## Mitigation & Recommendations
 - Use **WasmEdge 0.15.0+** once available for improved Component Model stability.

@@ -1,10 +1,4 @@
 *.o
-mqjs.wasm
-core.wasm
-embedded.wasm
-microquickjs.component.wasm
-mquickjs_build_native
-mqjs_stdlib.h
-mquickjs_atom.h
 build/
 generated/
+mquickjs_build

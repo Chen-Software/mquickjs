@@ -1,7 +1,7 @@
 WASI_SDK_PATH ?= /home/jules/wasi-sdk-25.0-x86_64-linux
 CC = $(WASI_SDK_PATH)/bin/clang
 AR = $(WASI_SDK_PATH)/bin/llvm-ar
-CFLAGS = -Oz -D_WASI_EMULATED_SIGNAL -I. -Igenerated -Imquickjs -mllvm -wasm-enable-sjlj
+CFLAGS = -Oz -D_WASI_EMULATED_SIGNAL -I. -Igenerated -Imquickjs -Ibuild -mllvm -wasm-enable-sjlj
 ADAPTER ?= /home/jules/wasi_snapshot_preview1.reactor.wasm
 
 BUILD_DIR = build
@@ -16,7 +16,7 @@ OBJS = \
 	$(BUILD_DIR)/microquickjs.o \
 	$(BUILD_DIR)/glue.o
 
-.PHONY: all clean inspect test
+.PHONY: all clean inspect test headers
 
 all: $(BUILD_DIR)/microquickjs.component.wasm
 
@@ -27,13 +27,24 @@ $(GEN_DIR)/microquickjs.c: microquickjs.wit
 	mkdir -p $(GEN_DIR)
 	wit-bindgen c ./microquickjs.wit --out-dir ./$(GEN_DIR) --world microquickjs
 
-$(BUILD_DIR)/%.o: $(SRC_DIR)/%.c | $(BUILD_DIR)
+$(BUILD_DIR)/mquickjs_build_native: $(SRC_DIR)/mqjs_stdlib.c $(SRC_DIR)/mquickjs_build.c $(SRC_DIR)/cutils.c | $(BUILD_DIR)
+	gcc -O2 -I$(SRC_DIR) -o $@ $^ -lm
+
+$(BUILD_DIR)/mqjs_stdlib.h: $(BUILD_DIR)/mquickjs_build_native
+	$< -m32 > $@
+
+$(BUILD_DIR)/mquickjs_atom.h: $(BUILD_DIR)/mquickjs_build_native
+	$< -m32 -a > $@
+
+headers: $(BUILD_DIR)/mqjs_stdlib.h $(BUILD_DIR)/mquickjs_atom.h
+
+$(BUILD_DIR)/%.o: $(SRC_DIR)/%.c | $(BUILD_DIR) headers
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD_DIR)/microquickjs.o: $(GEN_DIR)/microquickjs.c | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-$(BUILD_DIR)/glue.o: glue.c | $(BUILD_DIR) $(GEN_DIR)/microquickjs.c
+$(BUILD_DIR)/glue.o: glue.c | $(BUILD_DIR) $(GEN_DIR)/microquickjs.c headers
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD_DIR)/core.wasm: $(OBJS) $(GEN_DIR)/microquickjs_component_type.o
@@ -57,4 +68,4 @@ test: $(BUILD_DIR)/microquickjs.component.wasm
 	/home/jules/wasmtime-v29.0.1-x86_64-linux/wasmtime run -W all-proposals=y $< --invoke eval "2 + 2" || echo "Test failed (known runtime issue)"
 
 clean:
-	rm -rf $(BUILD_DIR) $(GEN_DIR) mqjs_stdlib.h mquickjs_atom.h
+	rm -rf $(BUILD_DIR) $(GEN_DIR)
