@@ -29,7 +29,7 @@
 #include <string.h>
 #include <assert.h>
 #include <math.h>
-#include <setjmp.h>
+#include "mquickjs_wasm_setjmp.h"
 
 #include "cutils.h"
 #include "dtoa.h"
