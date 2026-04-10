@@ -1,0 +1,79 @@
+# Makefile for building MicroQuickJS as a WASI 0.2 Component
+# Prerequisites: wasi-sdk, wit-bindgen, wasm-tools
+
+WASI_SDK_PATH ?= /tmp/wasi-sdk
+CC = $(WASI_SDK_PATH)/bin/clang
+AR = $(WASI_SDK_PATH)/bin/llvm-ar
+CFLAGS = -Oz -D_WASI_EMULATED_SIGNAL -Werror=implicit-function-declaration -I. -I./generated
+
+BUILD_DIR = build
+GEN_DIR = generated
+CARGO_BIN = $(HOME)/.cargo/bin
+
+OBJS = \
+	$(BUILD_DIR)/mquickjs.o \
+	$(BUILD_DIR)/cutils.o \
+	$(BUILD_DIR)/dtoa.o \
+	$(BUILD_DIR)/libm.o \
+	$(BUILD_DIR)/microquickjs.o \
+	$(BUILD_DIR)/glue.o \
+	$(GEN_DIR)/microquickjs_component_type.o
+
+.PHONY: all clean inspect test
+
+all: $(BUILD_DIR)/microquickjs.component.wasm
+
+$(BUILD_DIR):
+	mkdir -p $(BUILD_DIR)
+
+$(GEN_DIR)/microquickjs.c: microquickjs.wit
+	$(CARGO_BIN)/wit-bindgen c ./microquickjs.wit --out-dir ./$(GEN_DIR)
+
+$(BUILD_DIR)/%.o: %.c | $(BUILD_DIR)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/microquickjs.o: $(GEN_DIR)/microquickjs.c | $(BUILD_DIR)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/glue.o: glue.c | $(BUILD_DIR) $(GEN_DIR)/microquickjs.c
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/core.wasm: $(OBJS)
+	$(CC) $(CFLAGS) \
+		-Wl,--no-entry \
+		-Wl,--export=cabi_realloc \
+		-lwasi-emulated-signal \
+		$(OBJS) \
+		-o $@
+
+$(BUILD_DIR)/embedded.wasm: $(BUILD_DIR)/core.wasm microquickjs.wit
+	$(CARGO_BIN)/wasm-tools component embed ./microquickjs.wit $< --output $@
+
+wasi_snapshot_preview1.reactor.wasm:
+	curl -L https://github.com/bytecodealliance/wasmtime/releases/download/v29.0.1/wasi_snapshot_preview1.reactor.wasm -o $@
+
+env.wasm:
+	echo '(module (func (export "__wasm_setjmp") (param i32 i32 i32)) (func (export "__wasm_longjmp") (param i32 i32)) (func (export "__wasm_setjmp_test") (param i32 i32) (result i32) (i32.const 0)))' > env.wat
+	$(CARGO_BIN)/wasm-tools wat2wasm env.wat -o $@
+
+$(BUILD_DIR)/microquickjs.component.wasm: $(BUILD_DIR)/embedded.wasm wasi_snapshot_preview1.reactor.wasm env.wasm
+	$(CARGO_BIN)/wasm-tools component new $< --adapt env=env.wasm --adapt wasi_snapshot_preview1.reactor.wasm --output $@
+
+inspect: $(BUILD_DIR)/microquickjs.component.wasm
+	$(CARGO_BIN)/wasm-tools print $<
+
+test: $(BUILD_DIR)/microquickjs.component.wasm
+	@echo "Note: Running tests using host test runner as 'wasmtime run --invoke' is not supported for components yet."
+	$(MAKE) -f Makefile.wasi build/test_eval.wasm
+	$(CARGO_BIN)/wasmtime run build/test_eval.wasm "2+2"
+	$(CARGO_BIN)/wasmtime run build/test_eval.wasm "'hello' + ' world'"
+
+build/test_eval.wasm: test_eval.c $(OBJS)
+	$(CC) $(CFLAGS) -DTEST_RUNNER $< \
+		$(BUILD_DIR)/mquickjs.o $(BUILD_DIR)/cutils.o $(BUILD_DIR)/dtoa.o $(BUILD_DIR)/libm.o $(BUILD_DIR)/glue.o \
+		$(GEN_DIR)/microquickjs.c \
+		-lwasi-emulated-signal \
+		-o $@
+
+clean:
+	rm -rf $(BUILD_DIR) $(GEN_DIR) env.wat env.wasm wasi_snapshot_preview1.reactor.wasm
