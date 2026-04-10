@@ -74,9 +74,8 @@ static void ensure_runtime(void) {
     s_ctx = JS_NewContext(s_mem_buf, sizeof(s_mem_buf), &js_stdlib);
 }
 
-static char *make_wasi_string(const char *src) {
+static char *make_wasi_string(const char *src, size_t len) {
     if (!src) return NULL;
-    size_t len = strlen(src);
     char *out = (char *)cabi_realloc(NULL, 0, 1, len);
     if (!out) return NULL;
     memcpy(out, src, len);
@@ -94,19 +93,17 @@ bool exports_microquickjs_eval(microquickjs_string_t *code, microquickjs_string_
         JSValue exc = JS_GetException(s_ctx);
         const char *result_cstr;
         JSCStringBuf sbuf;
-        result_cstr = JS_ToCString(s_ctx, exc, &sbuf);
-        err->ptr = (uint8_t *)make_wasi_string(result_cstr ? result_cstr : "Unknown error");
-        err->len = result_cstr ? strlen(result_cstr) : 13;
+        size_t len;
+        result_cstr = JS_ToCStringLen(s_ctx, &len, exc, &sbuf);
+        err->ptr = (uint8_t *)make_wasi_string(result_cstr ? result_cstr : "Unknown error", result_cstr ? len : 13);
+        err->len = result_cstr ? len : 13;
         return false;
     }
     const char *result_cstr;
     JSCStringBuf sbuf;
-    result_cstr = JS_ToCString(s_ctx, val, &sbuf);
-    ret->ptr = (uint8_t *)make_wasi_string(result_cstr ? result_cstr : "undefined");
-    ret->len = result_cstr ? strlen(result_cstr) : 9;
-    return true;
-}
-
-bool exports_wasi_cli_run_run(void) {
+    size_t len;
+    result_cstr = JS_ToCStringLen(s_ctx, &len, val, &sbuf);
+    ret->ptr = (uint8_t *)make_wasi_string(result_cstr ? result_cstr : "undefined", result_cstr ? len : 9);
+    ret->len = result_cstr ? len : 9;
     return true;
 }

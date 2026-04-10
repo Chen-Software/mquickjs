@@ -32,9 +32,11 @@
 #ifndef __wasi__
 #include <setjmp.h>
 #else
-typedef int jmp_buf[10];
-#define setjmp(x) (0)
-#define longjmp(x, y) abort()
+#include <stdlib.h>
+typedef struct { int dummy; } jmp_buf_st;
+typedef jmp_buf_st jmp_buf[1];
+static inline int setjmp(jmp_buf env) { return 0; }
+static inline void longjmp(jmp_buf env, int val) { abort(); }
 #endif
 
 #include "cutils.h"
