@@ -25,8 +25,12 @@
  */
 #include <stdlib.h>
 #ifndef __wasi__
+#ifndef __wasi__
 #include <sys/wait.h>
+#endif
+#ifndef __wasi__
 #include <signal.h>
+#endif
 #endif
 #include <stdio.h>
 #include <stdarg.h>

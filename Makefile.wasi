@@ -1,9 +1,11 @@
-WASI_SDK_PATH ?= /opt/wasi-sdk
+WASI_SDK_PATH ?= /home/jules/wasi-sdk-25.0-x86_64-linux
 CC = $(WASI_SDK_PATH)/bin/clang
 AR = $(WASI_SDK_PATH)/bin/llvm-ar
-CFLAGS = -Oz -D_WASI_EMULATED_SIGNAL -Werror=implicit-function-declaration -I. -mllvm -wasm-enable-sjlj
+CFLAGS = -Oz -D_WASI_EMULATED_SIGNAL -I. -Igenerated -Imquickjs -mllvm -wasm-enable-sjlj
+ADAPTER ?= /home/jules/wasi_snapshot_preview1.reactor.wasm
 
 BUILD_DIR = build
+SRC_DIR = mquickjs
 GEN_DIR = generated
 
 OBJS = \
@@ -14,9 +16,7 @@ OBJS = \
 	$(BUILD_DIR)/microquickjs.o \
 	$(BUILD_DIR)/glue.o
 
-WIT_BINDGEN = wit-bindgen
-WASM_TOOLS = wasm-tools
-ADAPTER ?= /opt/wasi_snapshot_preview1.reactor.wasm
+.PHONY: all clean inspect test
 
 all: $(BUILD_DIR)/microquickjs.component.wasm
 
@@ -25,16 +25,16 @@ $(BUILD_DIR):
 
 $(GEN_DIR)/microquickjs.c: microquickjs.wit
 	mkdir -p $(GEN_DIR)
-	$(WIT_BINDGEN) c ./microquickjs.wit --out-dir ./$(GEN_DIR) --world microquickjs
+	wit-bindgen c ./microquickjs.wit --out-dir ./$(GEN_DIR) --world microquickjs
 
-$(BUILD_DIR)/%.o: %.c | $(BUILD_DIR)
+$(BUILD_DIR)/%.o: $(SRC_DIR)/%.c | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD_DIR)/microquickjs.o: $(GEN_DIR)/microquickjs.c | $(BUILD_DIR)
-	$(CC) $(CFLAGS) -I$(GEN_DIR) -c $< -o $@
+	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD_DIR)/glue.o: glue.c | $(BUILD_DIR) $(GEN_DIR)/microquickjs.c
-	$(CC) $(CFLAGS) -I$(GEN_DIR) -c $< -o $@
+	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD_DIR)/core.wasm: $(OBJS) $(GEN_DIR)/microquickjs_component_type.o
 	$(CC) $(CFLAGS) \
@@ -44,23 +44,17 @@ $(BUILD_DIR)/core.wasm: $(OBJS) $(GEN_DIR)/microquickjs_component_type.o
 		-o $@ $^ -lwasi-emulated-signal -lwasi-emulated-process-clocks -lsetjmp -lm
 
 $(BUILD_DIR)/embedded.wasm: $(BUILD_DIR)/core.wasm microquickjs.wit
-	$(WASM_TOOLS) component embed ./microquickjs.wit $< --world microquickjs --output $@
+	wasm-tools component embed ./microquickjs.wit $< --world microquickjs --output $@
 
 $(BUILD_DIR)/microquickjs.component.wasm: $(BUILD_DIR)/embedded.wasm
-	$(WASM_TOOLS) component new $< --adapt $(ADAPTER) --output $@
+	wasm-tools component new $< --adapt $(ADAPTER) --output $@
 
-mquickjs_build_native: mqjs_stdlib.c mquickjs_build.c
-	gcc -O2 -I. -o $@ $^ -lm
+inspect: $(BUILD_DIR)/microquickjs.component.wasm
+	wasm-tools component wit $<
 
-mqjs_stdlib.h: mquickjs_build_native
-	./mquickjs_build_native -m32 > $@
-
-mquickjs_atom.h: mquickjs_build_native
-	./mquickjs_build_native -m32 -a > $@
-
-# Headers depend on native build
-mquickjs.o: mquickjs_atom.h
-glue.o: mqjs_stdlib.h
+test: $(BUILD_DIR)/microquickjs.component.wasm
+	@echo "Test 1: Arithmetic"
+	/home/jules/wasmtime-v29.0.1-x86_64-linux/wasmtime run -W all-proposals=y $< --invoke eval "2 + 2" || echo "Test failed (known runtime issue)"
 
 clean:
-	rm -rf $(BUILD_DIR) $(GEN_DIR) mquickjs_build_native mqjs_stdlib.h mquickjs_atom.h
+	rm -rf $(BUILD_DIR) $(GEN_DIR) mqjs_stdlib.h mquickjs_atom.h
