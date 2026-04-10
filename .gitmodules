@@ -4,3 +4,6 @@
 [submodule "packages/wasi-sdk"]
 	path = packages/wasi-sdk
 	url = https://github.com/WebAssembly/wasi-sdk.git
+[submodule "packages/wasm-micro-runtime"]
+	path = packages/wasm-micro-runtime
+	url = https://github.com/bytecodealliance/wasm-micro-runtime.git
