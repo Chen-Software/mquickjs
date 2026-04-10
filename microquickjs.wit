@@ -1,0 +1,5 @@
+package local:microquickjs;
+
+world microquickjs {
+    export eval: func(code: string) -> result<string, string>;
+}

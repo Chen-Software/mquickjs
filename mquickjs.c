@@ -29,7 +29,19 @@
 #include <string.h>
 #include <assert.h>
 #include <math.h>
+#ifdef __wasi__
+typedef int jmp_buf[1];
+#define setjmp(env) (0)
+#define longjmp(env, val) abort()
+#else
+#ifdef __wasi__
+typedef int jmp_buf[1];
+#define setjmp(env) (0)
+#define longjmp(env, val) abort()
+#else
 #include <setjmp.h>
+#endif
+#endif
 
 #include "cutils.h"
 #include "dtoa.h"

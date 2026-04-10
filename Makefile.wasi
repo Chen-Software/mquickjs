@@ -1,0 +1,80 @@
+# MicroQuickJS WASI Component Makefile
+WASI_SDK_PATH ?= /opt/wasi-sdk
+CC = $(WASI_SDK_PATH)/bin/clang
+CFLAGS = -Oz -D_WASI_EMULATED_SIGNAL -D_WASI_EMULATED_PROCESS_CLOCKS -Werror=implicit-function-declaration -fno-math-errno -fno-trapping-math
+
+BUILD_DIR = build
+GEN_DIR = generated
+
+OBJS = \
+	$(BUILD_DIR)/mquickjs.o \
+	$(BUILD_DIR)/cutils.o \
+	$(BUILD_DIR)/dtoa.o \
+	$(BUILD_DIR)/libm.o \
+	$(BUILD_DIR)/microquickjs.o \
+	$(BUILD_DIR)/glue.o \
+	$(BUILD_DIR)/run.o
+
+ADAPTER_URL = https://github.com/bytecodealliance/wasmtime/releases/download/v23.0.1/wasi_snapshot_preview1.command.wasm
+
+.PHONY: all clean test inspect
+
+all: $(BUILD_DIR)/microquickjs.component.wasm
+
+$(BUILD_DIR):
+	mkdir -p $(BUILD_DIR)
+
+mquickjs_build: mquickjs_build.c mqjs_stdlib.c cutils.c
+	gcc -O2 -Wall $^ -o $@ -lm
+
+mquickjs_atom.h: mquickjs_build
+	./mquickjs_build -a -m32 > $@
+
+mqjs_stdlib.h: mquickjs_build
+	./mquickjs_build -m32 > $@
+
+$(GEN_DIR)/microquickjs.c: microquickjs.wit
+	mkdir -p $(GEN_DIR)
+	wit-bindgen c microquickjs.wit --out-dir $(GEN_DIR)
+
+$(BUILD_DIR)/%.o: %.c mquickjs_atom.h mqjs_stdlib.h | $(BUILD_DIR)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/microquickjs.o: $(GEN_DIR)/microquickjs.c | $(BUILD_DIR)
+	$(CC) $(CFLAGS) -I$(GEN_DIR) -c $< -o $@
+
+$(BUILD_DIR)/glue.o: glue.c mqjs_stdlib.h | $(BUILD_DIR)
+	$(CC) $(CFLAGS) -I. -I$(GEN_DIR) -c $< -o $@
+
+$(BUILD_DIR)/run.o: run.c $(GEN_DIR)/microquickjs.c | $(BUILD_DIR)
+	$(CC) $(CFLAGS) -I$(GEN_DIR) -c $< -o $@
+
+$(BUILD_DIR)/adapter.wasm: | $(BUILD_DIR)
+	curl -L -o $@ $(ADAPTER_URL)
+
+$(BUILD_DIR)/core.wasm: $(OBJS) $(GEN_DIR)/microquickjs_component_type.o
+	$(CC) $(CFLAGS) \
+		-Wl,--export=cabi_realloc \
+		$(OBJS) \
+		$(GEN_DIR)/microquickjs_component_type.o \
+		-lwasi-emulated-signal \
+		-lwasi-emulated-process-clocks \
+		-o $@
+
+$(BUILD_DIR)/embedded.wasm: $(BUILD_DIR)/core.wasm microquickjs.wit
+	wasm-tools component embed ./microquickjs.wit $< --output $@
+
+$(BUILD_DIR)/microquickjs.component.wasm: $(BUILD_DIR)/embedded.wasm $(BUILD_DIR)/adapter.wasm
+	wasm-tools component new $< --adapt wasi_snapshot_preview1=$(BUILD_DIR)/adapter.wasm --output $@
+
+inspect: $(BUILD_DIR)/microquickjs.component.wasm
+	wasm-tools component wit $<
+
+test: $(BUILD_DIR)/microquickjs.component.wasm
+	@echo "Running tests..."
+	wasmtime $< "2 + 2"
+	wasmtime $< "'hello' + ' ' + 'world'"
+	@echo "Tests complete."
+
+clean:
+	rm -rf $(BUILD_DIR) $(GEN_DIR) mquickjs_build mquickjs_atom.h mqjs_stdlib.h
