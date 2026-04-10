@@ -1,4 +1,4 @@
-package local:microquickjs;
+package local:microquickjs@0.1.0;
 
 world microquickjs {
     /// Evaluate JavaScript code and return result as string.
