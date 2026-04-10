@@ -30,7 +30,9 @@
 #include <ctype.h>
 #include <sys/time.h>
 #include <math.h>
+#ifndef __wasi__
 #include <setjmp.h>
+#endif
 
 #include "cutils.h"
 #include "dtoa.h"
