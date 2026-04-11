@@ -26,7 +26,6 @@ static void ensure_context(void) {
     s_ctx = JS_NewContext(s_mem, sizeof(s_mem), &js_stdlib);
 }
 
-/// Helper: Copy a string into WASI-managed memory for return to host.
 static char *make_wasi_string(const char *src, size_t len) {
     if (!src) return NULL;
     char *out = (char *)cabi_realloc(NULL, 0, 1, len + 1);
@@ -38,24 +37,19 @@ static char *make_wasi_string(const char *src, size_t len) {
 
 bool exports_microquickjs_eval(microquickjs_string_t *code, microquickjs_string_t *ok, microquickjs_string_t *err) {
     ensure_context();
-
     JSValue result = JS_Eval(s_ctx, (const char *)code->ptr, code->len, "<eval>", JS_EVAL_RETVAL);
-
     JSCStringBuf buf;
     if (JS_IsException(result)) {
         JSValue exception = JS_GetException(s_ctx);
         const char *exc_str = JS_ToCString(s_ctx, exception, &buf);
         if (!exc_str) exc_str = "Unknown error";
-
         err->ptr = (uint8_t *)make_wasi_string(exc_str, strlen(exc_str));
         err->len = strlen(exc_str);
-        return false; // Result::Err
+        return false;
     }
-
     const char *result_str = JS_ToCString(s_ctx, result, &buf);
     if (!result_str) result_str = "undefined";
-
     ok->ptr = (uint8_t *)make_wasi_string(result_str, strlen(result_str));
     ok->len = strlen(result_str);
-    return true; // Result::Ok
+    return true;
 }

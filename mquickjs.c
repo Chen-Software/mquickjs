@@ -29,7 +29,6 @@
 #include <string.h>
 #include <assert.h>
 #include <math.h>
-
 #ifdef __wasi__
 #define getenv(x) NULL
 #define signal(x, y) (void)0
@@ -45,6 +44,29 @@ typedef int jmp_buf[1];
 #include "dtoa.h"
 #include "mquickjs_priv.h"
 
+/*
+  TODO:
+  - regexp: better error position info
+  - use a specific MTAG for short functions instead of an immediate value
+  - use hash table for atoms
+  - set the length accessors as non configurable so that the
+    'get_length' instruction optimizations are always safe.
+  - memory:
+    - fix stack_bottom logic
+    - launch gc at regular intervals
+    - only launch compaction when needed (handle free blocks in malloc())
+    - avoid pass to rehash the properties
+    - ensure no undefined bytes (e.g. at end of JSString) in
+      saved bytecode ?
+  - reduced memory usage:
+    - reduce JSFunctionBytecode size (remove source_pos)
+    - do not explicitly store function names for get/set/bound
+    - use JSSTDLibraryDef fields instead of copying them to JSContext ?
+*/
+
+#define __exception __attribute__((warn_unused_result))
+
+#define JS_STACK_SLACK  16   /* additional free space on the stack */
 /* min free size in bytes between heap_free and the bottom of the stack */
 #define JS_MIN_FREE_SIZE 512
 /* minimum free size in bytes to create the out of memory object */

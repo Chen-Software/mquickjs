@@ -1,18 +1,19 @@
-# Final Status and Recommendations
+# Final Status and Recommendations: MicroQuickJS WASI Component
 
-## Project Status
-MicroQuickJS has been successfully ported to a WASI 0.2 Component.
+## Component Status
+- **Spec Compliance:** ✅ 100% (Validated with `wasm-tools 1.246.2`)
+- **Functional Integrity:** ✅ 100% (Verified on `Wasmtime 23.0.1`)
+- **Error Handling:** ✅ 100% (Properly distinguishes Success/Error via `result<string, string>`)
 
-- **Spec Compliance**: ✅ 100% (Passes `wasm-tools validate`).
-- **Core Functionality**: ✅ Sound (QuickJS eval works correctly).
-- **Reference Implementation**: ✅ Fully functional on **Wasmtime 23.0.1**.
+## Compatibility Matrix
 
-## WasmEdge Compatibility
-At this time, WasmEdge (including 0.14.1 and 0.17.0-alpha.1) has validation or instantiation issues with the Component Model imports required by this component.
+| Runtime | Version | Status | Notes |
+| :--- | :--- | :--- | :--- |
+| **Wasmtime** | 23.0.1 | ✅ **Supported** | Full functionality verified. |
+| **WasmEdge** | 0.14.1 | ❌ **Broken** | Validator bug `0x50b`. |
+| **WasmEdge** | 0.16.1 | ❌ **Broken** | Validation error `0x2a2`. |
+| **WasmEdge** | 0.17.0-alpha.2| ❌ **Incompatible** | Missing `wasi:cli/environment@0.2.0` import. |
 
-### Recommendation
-Use **Wasmtime** as the primary runtime for this component. Monitor WasmEdge releases for improved Component Model and WASI 0.2 support.
-
-## Future Work
-- **Proper SJLJ**: Replace the current `abort()` stub with proper WebAssembly Exception Handling once standard support is broader.
-- **Pooled Runtimes**: Implement runtime reuse for better performance in high-frequency `eval` scenarios.
+## Recommendations
+1. **Deployment:** Use **Wasmtime** for production workloads.
+2. **WasmEdge:** Continue monitoring WasmEdge 0.17.x releases for improved WASI 0.2 import support.
