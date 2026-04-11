@@ -30,7 +30,7 @@
 #include <ctype.h>
 #include <sys/time.h>
 #include <math.h>
-#include <setjmp.h>
+////#include <setjmp.h>
 
 #include "cutils.h"
 #include "dtoa.h"

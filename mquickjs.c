@@ -29,7 +29,7 @@
 #include <string.h>
 #include <assert.h>
 #include <math.h>
-#include <setjmp.h>
+////#include <setjmp.h>
 
 #include "cutils.h"
 #include "dtoa.h"
@@ -7305,7 +7305,7 @@ typedef struct JSParseState {
     uint8_t is_unicode : 1;
 
     /* error handling */
-    jmp_buf jmp_env;
+    int jmp_env[1];
     char error_msg[64];
 } JSParseState;
 
@@ -7606,7 +7606,7 @@ static void __attribute__((format(printf, 2, 3), noreturn)) js_parse_error(JSPar
     va_start(ap, fmt);
     js_vsnprintf(s->error_msg, sizeof(s->error_msg), fmt, ap);
     va_end(ap);
-    longjmp(s->jmp_env, 1);
+    abort();
 }
 
 static void js_parse_error_mem(JSParseState *s)
@@ -11713,7 +11713,7 @@ static JSValue JS_Parse2(JSContext *ctx, JSValue source_str,
     saved_top_gc_ref = ctx->top_gc_ref;
     saved_sp = ctx->sp;
     
-    if (setjmp(s->jmp_env)) {
+    if (0) {
         int line_num, col_num;
         JSValue val;
 

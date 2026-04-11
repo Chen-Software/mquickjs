@@ -1,0 +1,46 @@
+WASI_SDK_PATH ?= /home/jules/wasi-sdk
+CC = $(WASI_SDK_PATH)/bin/clang
+NM = $(WASI_SDK_PATH)/bin/llvm-nm
+CFLAGS = -m32 -Oz -D_WASI_EMULATED_SIGNAL -I.
+WIT_BINDGEN = wit-bindgen
+WASM_TOOLS = wasm-tools
+ADAPTER = wasi_snapshot_preview1.reactor.wasm
+
+OBJS = mquickjs.o cutils.o dtoa.o libm.o microquickjs.o glue.o glue_stdlib.o
+
+all: microquickjs.component.wasm
+
+mquickjs_build_native: mqjs_stdlib.c mquickjs_build.c
+	cc -O2 -I. mqjs_stdlib.c mquickjs_build.c -o mquickjs_build_native
+
+mqjs_stdlib.h: mquickjs_build_native
+	./mquickjs_build_native -m32 > mqjs_stdlib.h
+
+mquickjs_atom.h: mquickjs_build_native
+	./mquickjs_build_native -m32 -a > mquickjs_atom.h
+
+microquickjs.c microquickjs.h microquickjs_component_type.o: microquickjs.wit
+	$(WIT_BINDGEN) c ./microquickjs.wit --world microquickjs
+
+%.o: %.c microquickjs.h mqjs_stdlib.h mquickjs_atom.h
+	$(CC) $(CFLAGS) -c -o $@ $<
+
+core.wasm: $(OBJS) microquickjs_component_type.o
+	$(CC) $(CFLAGS) $(OBJS) microquickjs_component_type.o \
+		-Wl,--no-entry \
+		-Wl,--export=__wasm_export_microquickjs_eval \
+		-Wl,--export=cabi_realloc \
+		-Wl,--export=__wasm_call_ctors \
+		-lwasi-emulated-signal \
+		-o core.wasm
+
+embedded.wasm: core.wasm microquickjs.wit
+	$(WASM_TOOLS) component embed ./microquickjs.wit --world microquickjs core.wasm --output embedded.wasm
+
+microquickjs.component.wasm: embedded.wasm $(ADAPTER)
+	$(WASM_TOOLS) component new embedded.wasm \
+		--adapt wasi_snapshot_preview1=$(ADAPTER) \
+		--output microquickjs.component.wasm
+
+clean:
+	rm -f $(OBJS) core.wasm embedded.wasm microquickjs.component.wasm mquickjs_build_native mqjs_stdlib.h mquickjs_atom.h microquickjs.c microquickjs.h microquickjs_component_type.o
