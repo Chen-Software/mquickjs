@@ -1,7 +1,9 @@
 # MicroQuickJS WASI Component Makefile
 WASI_SDK_PATH ?= /opt/wasi-sdk
 CC = $(WASI_SDK_PATH)/bin/clang
-CFLAGS = -Oz -D_WASI_EMULATED_SIGNAL -D_WASI_EMULATED_PROCESS_CLOCKS -Werror=implicit-function-declaration -fno-math-errno -fno-trapping-math
+# Enable WASM Exceptions for setjmp/longjmp
+CFLAGS = -Oz -D_WASI_EMULATED_SIGNAL -D_WASI_EMULATED_PROCESS_CLOCKS -Werror=implicit-function-declaration -fno-math-errno -fno-trapping-math -mllvm -wasm-enable-sjlj
+LDFLAGS = -Wl,--export=cabi_realloc -lwasi-emulated-signal -lwasi-emulated-process-clocks -lsetjmp
 
 BUILD_DIR = build
 GEN_DIR = generated
@@ -13,6 +15,7 @@ OBJS = \
 	$(BUILD_DIR)/libm.o \
 	$(BUILD_DIR)/microquickjs.o \
 	$(BUILD_DIR)/glue.o \
+	$(BUILD_DIR)/wasi_stubs.o \
 	$(BUILD_DIR)/run.o
 
 ADAPTER_URL = https://github.com/bytecodealliance/wasmtime/releases/download/v23.0.1/wasi_snapshot_preview1.command.wasm
@@ -49,16 +52,17 @@ $(BUILD_DIR)/glue.o: glue.c mqjs_stdlib.h | $(BUILD_DIR)
 $(BUILD_DIR)/run.o: run.c $(GEN_DIR)/microquickjs.c | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -I$(GEN_DIR) -c $< -o $@
 
+$(BUILD_DIR)/wasi_stubs.o: wasi_stubs.c | $(BUILD_DIR)
+	$(CC) $(CFLAGS) -c $< -o $@
+
 $(BUILD_DIR)/adapter.wasm: | $(BUILD_DIR)
 	curl -L -o $@ $(ADAPTER_URL)
 
 $(BUILD_DIR)/core.wasm: $(OBJS) $(GEN_DIR)/microquickjs_component_type.o
 	$(CC) $(CFLAGS) \
-		-Wl,--export=cabi_realloc \
 		$(OBJS) \
 		$(GEN_DIR)/microquickjs_component_type.o \
-		-lwasi-emulated-signal \
-		-lwasi-emulated-process-clocks \
+		$(LDFLAGS) \
 		-o $@
 
 $(BUILD_DIR)/embedded.wasm: $(BUILD_DIR)/core.wasm microquickjs.wit

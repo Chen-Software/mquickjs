@@ -30,24 +30,13 @@
 #include <ctype.h>
 #include <sys/time.h>
 #include <math.h>
-#ifndef __wasi__
+
 #ifndef __wasi__
 #include <setjmp.h>
-#endif
 #endif
 
 #include "cutils.h"
 #include "dtoa.h"
-
-/* 
-   TODO:
-   - test n_digits=101 instead of 100
-   - simplify subnormal handling
-   - reduce max memory usage
-   - free format: could add shortcut if exact result
-   - use 64 bit limb_t when possible
-   - use another algorithm for free format dtoa in base 10 (ryu ?)
-*/
 
 #define USE_POW5_TABLE
 /* use fast path to print small integers in free format */

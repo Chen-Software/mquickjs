@@ -1,83 +1,61 @@
 #include <string.h>
 #include <stdint.h>
-#include <stdlib.h>
-#include <stdio.h>
-#include "mquickjs.h"
+#include <stdbool.h>
 #include "generated/microquickjs.h"
+#include "mquickjs.h"
 
-JSValue js_print(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
-    for (int i = 0; i < argc; i++) {
-        JSCStringBuf buf;
-        const char *str = JS_ToCString(ctx, argv[i], &buf);
-        if (str) {
-            printf("%s%s", i > 0 ? " " : "", str);
-        }
-    }
-    printf("\n");
-    return JS_UNDEFINED;
-}
+// External declarations for symbols used in mqjs_stdlib.h
+JSValue js_print(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
+JSValue js_gc(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
+JSValue js_date_now(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
+JSValue js_performance_now(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
+JSValue js_load(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
+JSValue js_setTimeout(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
+JSValue js_clearTimeout(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv);
 
-JSValue js_performance_now(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
-    return JS_NewFloat64(ctx, 0.0);
-}
-
-JSValue js_date_now(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
-    return JS_NewFloat64(ctx, 0.0);
-}
-
-JSValue js_gc(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
-    JS_GC(ctx);
-    return JS_UNDEFINED;
-}
-
-JSValue js_load(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
-    return JS_ThrowTypeError(ctx, "load() is not supported in this WASI component");
-}
-
-JSValue js_setTimeout(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
-    return JS_ThrowTypeError(ctx, "setTimeout() is not supported in this WASI component");
-}
-
-JSValue js_clearTimeout(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
-    return JS_UNDEFINED;
-}
-
-#define JS_CLASS_COUNT JS_CLASS_USER
 #include "mqjs_stdlib.h"
 
-#define JS_HEAP_SIZE (1024 * 1024)
-static uint8_t js_heap[JS_HEAP_SIZE];
+// Forward declaration of cabi_realloc (provided by wit-bindgen runtime)
+void *cabi_realloc(void *ptr, size_t old_size, size_t old_align, size_t new_size);
 
-bool exports_microquickjs_eval(microquickjs_string_t *code_ptr, microquickjs_string_t *ret, microquickjs_string_t *err) {
-    JSContext *ctx;
-    JSValue result;
+static uint8_t s_mem[4 * 1024 * 1024];
+static JSContext *s_ctx = NULL;
 
-    ctx = JS_NewContext(js_heap, JS_HEAP_SIZE, &js_stdlib);
-    if (!ctx) {
-        microquickjs_string_dup(err, "Internal error: failed to create JS context");
-        return false;
-    }
+static void ensure_context(void) {
+    if (s_ctx) return;
+    s_ctx = JS_NewContext(s_mem, sizeof(s_mem), &js_stdlib);
+}
 
-    result = JS_Eval(ctx, (const char *)code_ptr->ptr, code_ptr->len, "<stdin>", JS_EVAL_RETVAL);
+/// Helper: Copy a string into WASI-managed memory for return to host.
+static char *make_wasi_string(const char *src, size_t len) {
+    if (!src) return NULL;
+    char *out = (char *)cabi_realloc(NULL, 0, 1, len + 1);
+    if (!out) return NULL;
+    memcpy(out, src, len);
+    out[len] = '\0';
+    return out;
+}
 
-    if (JS_IsException(result)) {
-        JSValue exception = JS_GetException(ctx);
-        JSCStringBuf buf;
-        const char *exc_str = JS_ToCString(ctx, exception, &buf);
-        microquickjs_string_dup(err, exc_str ? exc_str : "Unknown error");
-        JS_FreeContext(ctx);
-        return false;
-    }
+bool exports_microquickjs_eval(microquickjs_string_t *code, microquickjs_string_t *ok, microquickjs_string_t *err) {
+    ensure_context();
+
+    JSValue result = JS_Eval(s_ctx, (const char *)code->ptr, code->len, "<eval>", JS_EVAL_RETVAL);
 
     JSCStringBuf buf;
-    const char *result_str = JS_ToCString(ctx, result, &buf);
-    if (!result_str) {
-        microquickjs_string_dup(err, "Internal error: failed to convert result to string");
-        JS_FreeContext(ctx);
-        return false;
+    if (JS_IsException(result)) {
+        JSValue exception = JS_GetException(s_ctx);
+        const char *exc_str = JS_ToCString(s_ctx, exception, &buf);
+        if (!exc_str) exc_str = "Unknown error";
+
+        err->ptr = (uint8_t *)make_wasi_string(exc_str, strlen(exc_str));
+        err->len = strlen(exc_str);
+        return false; // Result::Err
     }
 
-    microquickjs_string_dup(ret, result_str);
-    JS_FreeContext(ctx);
-    return true;
+    const char *result_str = JS_ToCString(s_ctx, result, &buf);
+    if (!result_str) result_str = "undefined";
+
+    ok->ptr = (uint8_t *)make_wasi_string(result_str, strlen(result_str));
+    ok->len = strlen(result_str);
+    return true; // Result::Ok
 }
