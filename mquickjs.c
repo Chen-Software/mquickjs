@@ -29,7 +29,12 @@
 #include <string.h>
 #include <assert.h>
 #include <math.h>
-#include <setjmp.h>
+//////#include "jmp_stub.h"
+#define setjmp(env) (0)
+#define longjmp(env, val) abort()
+typedef int jmp_buf;
+#define setjmp(env) (0)
+#define longjmp(env, val) abort()
 
 #include "cutils.h"
 #include "dtoa.h"
@@ -7305,7 +7310,9 @@ typedef struct JSParseState {
     uint8_t is_unicode : 1;
 
     /* error handling */
-    jmp_buf jmp_env;
+    int jmp_env;
+#define setjmp(env) (0)
+#define longjmp(env, val) abort()
     char error_msg[64];
 } JSParseState;
 

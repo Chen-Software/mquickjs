@@ -1,0 +1,3 @@
+[submodule "packages/WasmEdge"]
+	path = packages/WasmEdge
+	url = https://github.com/WasmEdge/WasmEdge.git
