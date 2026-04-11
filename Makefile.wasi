@@ -59,6 +59,10 @@ $(BUILD_DIR)/embedded.wasm: $(BUILD_DIR)/core.wasm microquickjs.wit
 
 $(BUILD_DIR)/microquickjs.component.wasm: $(BUILD_DIR)/embedded.wasm
 	wasm-tools component new $< --adapt $(ADAPTER) --output $@
+	@if which wasm-opt > /dev/null 2>&1; then \
+		echo "Optimizing with wasm-opt..."; \
+		wasm-opt -Oz $@ -o $@; \
+	fi
 
 inspect: $(BUILD_DIR)/microquickjs.component.wasm
 	wasm-tools component wit $<

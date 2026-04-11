@@ -13,6 +13,7 @@ This is a port of MicroQuickJS to a WASI 0.2 WebAssembly Component.
 For deeper technical details, please refer to:
 - [DESIGN.md](DESIGN.md) — Detailed architecture, design decisions, and implementation notes.
 - [REQUIREMENTS.md](REQUIREMENTS.md) — Formal requirements and acceptance criteria for the WASI port.
+- [PLAN.md](PLAN.md) — Step-by-step implementation plan and task tracking.
 
 ## Build Environment
 Requires the following tools:
