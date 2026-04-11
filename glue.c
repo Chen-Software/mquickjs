@@ -1,7 +1,11 @@
 #include <string.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <stdio.h>
 #include "mquickjs/mquickjs.h"
+
+// cabi_realloc is provided by wit-bindgen's microquickjs.c
+void *cabi_realloc(void *ptr, size_t old_size, size_t align, size_t new_size);
 
 // Minimal implementations of missing functions for WASI
 JSValue js_date_now(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) { return JS_UNDEFINED; }
@@ -15,8 +19,10 @@ JSValue js_clearTimeout(JSContext *ctx, JSValue *this_val, int argc, JSValue *ar
 #include "generated/microquickjs.h"
 #include "mqjs_stdlib.h"
 
-// cabi_realloc is provided by wit-bindgen's microquickjs.c
-void *cabi_realloc(void *ptr, size_t old_size, size_t align, size_t new_size);
+struct exports_local_microquickjs_engine_js_value_t {
+    JSValue val;
+    JSGCRef root;
+};
 
 static uint8_t s_mem[4 * 1024 * 1024];
 static JSContext *s_ctx = NULL;
@@ -26,61 +32,181 @@ static void ensure_context(void) {
     s_ctx = JS_NewContext(s_mem, sizeof(s_mem), &js_stdlib);
 }
 
-static char *wasi_strndup(const char *s, size_t n) {
-    char *p = cabi_realloc(NULL, 0, 1, n + 1);
-    memcpy(p, s, n);
-    p[n] = '\0';
-    return p;
+static exports_local_microquickjs_engine_own_js_value_t make_own_value(JSValue val) {
+    exports_local_microquickjs_engine_js_value_t *rep = malloc(sizeof(*rep));
+    rep->val = val;
+    JS_AddGCRef(s_ctx, &rep->root);
+    rep->root.val = val;
+    return exports_local_microquickjs_engine_js_value_new(rep);
 }
 
-void exports_microquickjs_eval(
-    microquickjs_string_t *code,
-    microquickjs_string_t *ret)
-{
+void exports_local_microquickjs_engine_js_value_destructor(exports_local_microquickjs_engine_js_value_t *rep) {
+    JS_DeleteGCRef(s_ctx, &rep->root);
+    free(rep);
+}
+
+bool exports_local_microquickjs_engine_method_js_value_is_int(exports_local_microquickjs_engine_borrow_js_value_t self) {
+    return JS_IsInt(self->val);
+}
+
+bool exports_local_microquickjs_engine_method_js_value_is_bool(exports_local_microquickjs_engine_borrow_js_value_t self) {
+    return JS_IsBool(self->val);
+}
+
+bool exports_local_microquickjs_engine_method_js_value_is_null(exports_local_microquickjs_engine_borrow_js_value_t self) {
+    return JS_IsNull(self->val);
+}
+
+bool exports_local_microquickjs_engine_method_js_value_is_undefined(exports_local_microquickjs_engine_borrow_js_value_t self) {
+    return JS_IsUndefined(self->val);
+}
+
+bool exports_local_microquickjs_engine_method_js_value_is_exception(exports_local_microquickjs_engine_borrow_js_value_t self) {
+    return JS_IsException(self->val);
+}
+
+bool exports_local_microquickjs_engine_method_js_value_is_number(exports_local_microquickjs_engine_borrow_js_value_t self) {
     ensure_context();
+    return JS_IsNumber(s_ctx, self->val);
+}
 
-    JSValue val = JS_Eval(s_ctx,
-                          (const char *)code->ptr,
-                          code->len,
-                          "<eval>",
-                          JS_EVAL_RETVAL);
+bool exports_local_microquickjs_engine_method_js_value_is_string(exports_local_microquickjs_engine_borrow_js_value_t self) {
+    ensure_context();
+    return JS_IsString(s_ctx, self->val);
+}
 
-    const char *cstr;
-    size_t clen;
+bool exports_local_microquickjs_engine_method_js_value_is_error(exports_local_microquickjs_engine_borrow_js_value_t self) {
+    ensure_context();
+    return JS_IsError(s_ctx, self->val);
+}
+
+bool exports_local_microquickjs_engine_method_js_value_is_function(exports_local_microquickjs_engine_borrow_js_value_t self) {
+    ensure_context();
+    return JS_IsFunction(s_ctx, self->val);
+}
+
+void exports_local_microquickjs_engine_method_js_value_to_string(exports_local_microquickjs_engine_borrow_js_value_t self, microquickjs_string_t *ret) {
+    ensure_context();
+    size_t len;
     JSCStringBuf buf;
+    const char *cstr = JS_ToCStringLen(s_ctx, &len, self->val, &buf);
+    if (!cstr) {
+        ret->ptr = NULL;
+        ret->len = 0;
+        return;
+    }
+    ret->ptr = cabi_realloc(NULL, 0, 1, len);
+    memcpy(ret->ptr, cstr, len);
+    ret->len = len;
+}
 
+int32_t exports_local_microquickjs_engine_method_js_value_to_int32(exports_local_microquickjs_engine_borrow_js_value_t self) {
+    ensure_context();
+    int res;
+    JS_ToInt32(s_ctx, &res, self->val);
+    return res;
+}
+
+double exports_local_microquickjs_engine_method_js_value_to_float64(exports_local_microquickjs_engine_borrow_js_value_t self) {
+    ensure_context();
+    double res;
+    JS_ToNumber(s_ctx, &res, self->val);
+    return res;
+}
+
+exports_local_microquickjs_engine_own_js_value_t exports_local_microquickjs_engine_method_js_value_get_property(exports_local_microquickjs_engine_borrow_js_value_t self, microquickjs_string_t *name) {
+    ensure_context();
+    char *cstr = malloc(name->len + 1);
+    memcpy(cstr, name->ptr, name->len);
+    cstr[name->len] = '\0';
+    JSValue res = JS_GetPropertyStr(s_ctx, self->val, cstr);
+    free(cstr);
+    return make_own_value(res);
+}
+
+void exports_local_microquickjs_engine_method_js_value_set_property(exports_local_microquickjs_engine_borrow_js_value_t self, microquickjs_string_t *name, exports_local_microquickjs_engine_borrow_js_value_t val) {
+    ensure_context();
+    char *cstr = malloc(name->len + 1);
+    memcpy(cstr, name->ptr, name->len);
+    cstr[name->len] = '\0';
+    JS_SetPropertyStr(s_ctx, self->val, cstr, val->val);
+    free(cstr);
+}
+
+exports_local_microquickjs_engine_own_js_value_t exports_local_microquickjs_engine_method_js_value_call(exports_local_microquickjs_engine_borrow_js_value_t self, exports_local_microquickjs_engine_list_borrow_js_value_t *args) {
+    ensure_context();
+    for (size_t i = 0; i < args->len; i++) {
+        JS_PushArg(s_ctx, args->ptr[i]->val);
+    }
+    JSValue res = JS_Call(s_ctx, args->len);
+    return make_own_value(res);
+}
+
+exports_local_microquickjs_engine_own_js_value_t exports_local_microquickjs_engine_new_int32(int32_t val) {
+    ensure_context();
+    return make_own_value(JS_NewInt32(s_ctx, val));
+}
+
+exports_local_microquickjs_engine_own_js_value_t exports_local_microquickjs_engine_new_float64(double val) {
+    ensure_context();
+    return make_own_value(JS_NewFloat64(s_ctx, val));
+}
+
+exports_local_microquickjs_engine_own_js_value_t exports_local_microquickjs_engine_new_bool(bool val) {
+    ensure_context();
+    return make_own_value(JS_NewBool(val));
+}
+
+exports_local_microquickjs_engine_own_js_value_t exports_local_microquickjs_engine_new_string(microquickjs_string_t *val) {
+    ensure_context();
+    return make_own_value(JS_NewStringLen(s_ctx, (const char *)val->ptr, val->len));
+}
+
+exports_local_microquickjs_engine_own_js_value_t exports_local_microquickjs_engine_new_object(void) {
+    ensure_context();
+    return make_own_value(JS_NewObject(s_ctx));
+}
+
+exports_local_microquickjs_engine_own_js_value_t exports_local_microquickjs_engine_new_array(void) {
+    ensure_context();
+    return make_own_value(JS_NewArray(s_ctx, 0));
+}
+
+exports_local_microquickjs_engine_own_js_value_t exports_local_microquickjs_engine_get_global_object(void) {
+    ensure_context();
+    return make_own_value(JS_GetGlobalObject(s_ctx));
+}
+
+bool exports_local_microquickjs_engine_eval(microquickjs_string_t *code, microquickjs_string_t *ret, microquickjs_string_t *err) {
+    ensure_context();
+    JSValue val = JS_Eval(s_ctx, (const char *)code->ptr, code->len, "<eval>", JS_EVAL_RETVAL);
+
+    size_t len;
+    JSCStringBuf buf;
     if (JS_IsException(val)) {
         JSValue exc = JS_GetException(s_ctx);
-        cstr = JS_ToCStringLen(s_ctx, &clen, exc, &buf);
+        const char *cstr = JS_ToCStringLen(s_ctx, &len, exc, &buf);
         if (!cstr) {
-            static const char fallback[] = "Error: unknown exception";
-            ret->ptr = (uint8_t *)wasi_strndup(fallback, sizeof(fallback) - 1);
-            ret->len = sizeof(fallback) - 1;
-            return;
+            err->ptr = cabi_realloc(NULL, 0, 1, 24);
+            memcpy(err->ptr, "Error: unknown exception", 24);
+            err->len = 24;
+            return false;
         }
-        if (clen < 5 || memcmp(cstr, "Error", 5) != 0) {
-            static const char prefix[] = "Error: ";
-            size_t total = sizeof(prefix) - 1 + clen;
-            char *out = cabi_realloc(NULL, 0, 1, total + 1);
-            memcpy(out, prefix, sizeof(prefix) - 1);
-            memcpy(out + sizeof(prefix) - 1, cstr, clen);
-            out[total] = '\0';
-            ret->ptr = (uint8_t *)out;
-            ret->len = total;
-        } else {
-            ret->ptr = (uint8_t *)wasi_strndup(cstr, clen);
-            ret->len = clen;
-        }
-        return;
+        err->ptr = cabi_realloc(NULL, 0, 1, len);
+        memcpy(err->ptr, cstr, len);
+        err->len = len;
+        return false;
     }
 
-    cstr = JS_ToCStringLen(s_ctx, &clen, val, &buf);
+    const char *cstr = JS_ToCStringLen(s_ctx, &len, val, &buf);
     if (!cstr) {
-        static const char fallback[] = "undefined";
-        ret->ptr = (uint8_t *)wasi_strndup(fallback, sizeof(fallback) - 1);
-        ret->len = sizeof(fallback) - 1;
-        return;
+        ret->ptr = cabi_realloc(NULL, 0, 1, 9);
+        memcpy(ret->ptr, "undefined", 9);
+        ret->len = 9;
+        return true;
     }
-    ret->ptr = (uint8_t *)wasi_strndup(cstr, clen);
-    ret->len = clen;
+    ret->ptr = cabi_realloc(NULL, 0, 1, len);
+    memcpy(ret->ptr, cstr, len);
+    ret->len = len;
+    return true;
 }
