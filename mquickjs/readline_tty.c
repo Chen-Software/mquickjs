@@ -38,19 +38,11 @@
 #include <conio.h>
 #include <io.h>
 #else
-#ifdef __wasi__
 #include <unistd.h>
-#else
 #ifndef __wasi__
 #include <signal.h>
-#endif
-#include <unistd.h>
-#ifndef __wasi__
 #include <termios.h>
-#endif
-#ifndef __wasi__
 #include <sys/ioctl.h>
-#endif
 #endif
 #endif
 

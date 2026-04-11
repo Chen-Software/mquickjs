@@ -1,8 +1,8 @@
-WASI_SDK_PATH ?= /home/jules/wasi-sdk-25.0-x86_64-linux
+WASI_SDK_PATH ?= /opt/wasi-sdk
 CC = $(WASI_SDK_PATH)/bin/clang
 AR = $(WASI_SDK_PATH)/bin/llvm-ar
 CFLAGS = -Oz -D_WASI_EMULATED_SIGNAL -I. -Igenerated -Imquickjs -Ibuild -mllvm -wasm-enable-sjlj
-ADAPTER ?= /home/jules/wasi_snapshot_preview1.reactor.wasm
+ADAPTER ?= /usr/share/wasi-adapter/wasi_snapshot_preview1.reactor.wasm
 
 BUILD_DIR = build
 SRC_DIR = mquickjs
@@ -65,7 +65,7 @@ inspect: $(BUILD_DIR)/microquickjs.component.wasm
 
 test: $(BUILD_DIR)/microquickjs.component.wasm
 	@echo "Test 1: Arithmetic"
-	/home/jules/wasmtime-v29.0.1-x86_64-linux/wasmtime run -W all-proposals=y $< --invoke eval "2 + 2" || echo "Test failed (known runtime issue)"
+	wasmtime run -W all-proposals=y $< --invoke eval "2 + 2" || echo "Test failed (known runtime issue)"
 
 clean:
 	rm -rf $(BUILD_DIR) $(GEN_DIR)

@@ -25,16 +25,8 @@
  */
 #include <stdlib.h>
 #ifndef __wasi__
-#ifndef __wasi__
-#ifndef __wasi__
 #include <sys/wait.h>
-#endif
-#endif
-#ifndef __wasi__
-#ifndef __wasi__
 #include <signal.h>
-#endif
-#endif
 #endif
 #include <stdio.h>
 #include <stdarg.h>
@@ -18335,4 +18327,3 @@ JSValue js_string_search(JSContext *ctx, JSValue *this_val,
 {
     return js_regexp_exec(ctx, &argv[0], 1, this_val, MAGIC_REGEXP_SEARCH);
 }
-/* WASI PATCH */
