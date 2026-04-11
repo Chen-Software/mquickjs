@@ -9,6 +9,11 @@ This is a port of MicroQuickJS to a WASI 0.2 WebAssembly Component.
 - Uses a singleton JS context for persistent state between calls.
 - Aggressively optimized for size using `-Oz`.
 
+## Documentation
+For deeper technical details, please refer to:
+- [DESIGN.md](DESIGN.md) — Detailed architecture, design decisions, and implementation notes.
+- [REQUIREMENTS.md](REQUIREMENTS.md) — Formal requirements and acceptance criteria for the WASI port.
+
 ## Build Environment
 Requires the following tools:
 - **WASI SDK:** 25.0
