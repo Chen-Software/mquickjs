@@ -23,6 +23,8 @@
  * THE SOFTWARE.
  */
 #include <stdlib.h>
+#include <sys/wait.h>
+#include <signal.h>
 #include <stdio.h>
 #include <stdarg.h>
 #include <inttypes.h>

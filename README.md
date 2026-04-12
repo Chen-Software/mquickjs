@@ -18,6 +18,12 @@ different in order to consume less memory. In particular, it relies on
 a tracing garbage collector, the VM does not use the CPU stack and
 strings are stored in UTF-8.
 
+## WASI Component
+
+MicroQuickJS has been ported to WebAssembly as a WASI 0.2 Component. This allows the engine to be embedded in modern WebAssembly runtimes with a high-level WIT interface.
+
+For detailed information on building and using the WASI component, see [README.WASI.md](README.WASI.md).
+
 ## REPL
 
 The REPL is `mqjs`. Usage:

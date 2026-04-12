@@ -137,7 +137,7 @@ static JSValue js_filled_rectangle_constructor(JSContext *ctx, JSValue *this_val
     if (!(argc & FRAME_CF_CTOR))
         return JS_ThrowTypeError(ctx, "must be called with new");
     obj = JS_PushGCRef(ctx, &obj_ref);
-    
+
     argc &= ~FRAME_CF_CTOR;
     *obj = JS_NewObjectClassUser(ctx, JS_CLASS_FILLED_RECTANGLE);
     d = malloc(sizeof(*d));
@@ -172,7 +172,7 @@ static JSValue js_print(JSContext *ctx, JSValue *this_val, int argc, JSValue *ar
 {
     int i;
     JSValue v;
-    
+
     for(i = 0; i < argc; i++) {
         if (i != 0)
             putchar(' ');
@@ -257,7 +257,7 @@ int main(int argc, const char **argv)
     JSContext *ctx;
     const char *filename;
     JSValue val;
-    
+
     if (argc < 2) {
         printf("usage: example script.js\n");
         exit(1);
@@ -269,7 +269,7 @@ int main(int argc, const char **argv)
     mem_buf = malloc(mem_size);
     ctx = JS_NewContext(mem_buf, mem_size, &js_stdlib);
     JS_SetLogFunc(ctx, js_log_func);
-    
+
     buf = load_file(filename, &buf_len);
     val = JS_Eval(ctx, (const char *)buf, buf_len, filename, 0);
     free(buf);
@@ -280,7 +280,7 @@ int main(int argc, const char **argv)
         printf("\n");
         exit(1);
     }
-    
+
     JS_FreeContext(ctx);
     free(mem_buf);
     return 0;

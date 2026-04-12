@@ -38,12 +38,12 @@
 #include <conio.h>
 #include <io.h>
 #else
-#include <signal.h>
 #include <unistd.h>
+#ifndef __wasi__
+#include <signal.h>
 #include <termios.h>
 #include <sys/ioctl.h>
 #endif
-
 #include "readline_tty.h"
 
 static int ctrl_c_pressed;
@@ -109,6 +109,7 @@ static void set_processed_input(BOOL enable)
 #else
 /* init terminal so that we can grab keys */
 /* XXX: merge with cp_utils.c */
+#ifndef __wasi__
 static struct termios oldtty;
 static int old_fd0_flags;
 
@@ -126,13 +127,17 @@ static void sigint_handler(int signo)
         signal(SIGINT, SIG_DFL);
     }
 }
+#endif
 
 int readline_tty_init(void)
 {
+    int n_cols;
+    n_cols = 80;
+
+#ifndef __wasi__
     struct termios tty;
     struct sigaction sa;
     struct winsize ws;
-    int n_cols;
     
     tcgetattr (0, &tty);
     oldtty = tty;
@@ -159,11 +164,11 @@ int readline_tty_init(void)
     atexit(term_exit);
 
     //    fcntl(0, F_SETFL, O_NONBLOCK);
-    n_cols = 80;
     if (ioctl(0, TIOCGWINSZ, &ws) == 0 &&
         ws.ws_col >= 4 && ws.ws_row >= 4) {
         n_cols = ws.ws_col;
     }
+#endif
     return n_cols;
 }
 #endif
@@ -200,6 +205,11 @@ const char *readline_tty(ReadlineState *s,
         len = read(0, buf, sizeof(buf));
         if (len == 0)
             break;
+        if (len < 0) {
+            if (errno == EINTR || errno == EAGAIN)
+                continue;
+            break;
+        }
         for(i = 0; i < len; i++) {
             c = buf[i];
 #ifdef _WIN32

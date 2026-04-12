@@ -1,0 +1,4 @@
+*.o
+build/
+generated/
+mquickjs_build
