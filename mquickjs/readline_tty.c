@@ -44,8 +44,6 @@
 #include <termios.h>
 #include <sys/ioctl.h>
 #endif
-#endif
-
 #include "readline_tty.h"
 
 static int ctrl_c_pressed;

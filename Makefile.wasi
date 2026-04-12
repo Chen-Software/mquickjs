@@ -1,7 +1,8 @@
 WASI_SDK_PATH ?= /opt/wasi-sdk
 CC = $(WASI_SDK_PATH)/bin/clang
 AR = $(WASI_SDK_PATH)/bin/llvm-ar
-CFLAGS = -Oz -D_WASI_EMULATED_SIGNAL -I. -Igenerated -Imquickjs -Ibuild -mllvm -wasm-enable-sjlj
+CFLAGS = -Oz -target wasm32-wasi -D_WASI_EMULATED_SIGNAL -I. -Igenerated -Imquickjs -Iwasi_shims -Ibuild -mllvm -wasm-enable-sjlj
+LDFLAGS = -target wasm32-wasi -mexec-model=reactor -Wl,--no-entry -Wl,--export=cabi_realloc -Wl,--export=__wasm_call_ctors -lwasi-emulated-signal -lwasi-emulated-process-clocks -lsetjmp -lm
 ADAPTER ?= /usr/share/wasi-adapter/wasi_snapshot_preview1.reactor.wasm
 
 BUILD_DIR = build
@@ -48,11 +49,7 @@ $(BUILD_DIR)/glue.o: glue.c | $(BUILD_DIR) $(GEN_DIR)/microquickjs.c headers
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD_DIR)/core.wasm: $(OBJS) $(GEN_DIR)/microquickjs_component_type.o
-	$(CC) $(CFLAGS) \
-		-Wl,--no-entry \
-		-Wl,--export=cabi_realloc \
-		-Wl,--export=__wasm_call_ctors \
-		-o $@ $^ -lwasi-emulated-signal -lwasi-emulated-process-clocks -lsetjmp -lm
+	$(CC) $(LDFLAGS) -o $@ $^
 
 $(BUILD_DIR)/embedded.wasm: $(BUILD_DIR)/core.wasm microquickjs.wit
 	wasm-tools component embed ./microquickjs.wit $< --world microquickjs --output $@
@@ -63,6 +60,7 @@ $(BUILD_DIR)/microquickjs.component.wasm: $(BUILD_DIR)/embedded.wasm
 		echo "Optimizing with wasm-opt..."; \
 		wasm-opt -Oz $@ -o $@; \
 	fi
+	@echo "Component size: $$(stat -c %s $@) bytes"
 
 inspect: $(BUILD_DIR)/microquickjs.component.wasm
 	wasm-tools component wit $<

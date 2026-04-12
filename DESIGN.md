@@ -138,8 +138,7 @@ These files define the Component Model ABI entry points, the `microquickjs_strin
 
 **`build/mqjs_stdlib.h`** — produced by compiling and running a native host tool:
 ```bash
-gcc -O2 -I mquickjs/ -o build/mquickjs_build_native \
-    mquickjs/mqjs_stdlib.c mquickjs/mquickjs_build.c mquickjs/cutils.c -lm
+gcc -O2 -I mquickjs/ -o build/mquickjs_build_native     mquickjs/mqjs_stdlib.c mquickjs/mquickjs_build.c mquickjs/cutils.c -lm
 build/mquickjs_build_native -m32 > build/mqjs_stdlib.h
 ```
 This header defines `js_stdlib` as a `const JSSTDLibraryDef` containing the pre-compiled atom table, function table, and global object layout for the 32-bit wasm32 target. The `-m32` flag is required to generate 32-bit offsets matching the wasm32 address space.
@@ -234,23 +233,12 @@ build/microquickjs.component.wasm  (size-optimized)
 
 **Compiler flags:**
 ```makefile
-CFLAGS = -Oz \
-         --target=wasm32-wasi \
-         -mexec-model=reactor \
-         -D_WASI_EMULATED_SIGNAL \
-         -I. -Igenerated -Imquickjs -Ibuild \
-         -mllvm -wasm-enable-sjlj
+CFLAGS = -Oz          --target=wasm32-wasi          -mexec-model=reactor          -D_WASI_EMULATED_SIGNAL          -I. -Igenerated -Imquickjs -Ibuild          -mllvm -wasm-enable-sjlj
 ```
 
 **Linker flags:**
 ```makefile
-LDFLAGS = -Wl,--no-entry \
-          -Wl,--export=cabi_realloc \
-          -Wl,--export=__wasm_call_ctors \
-          -lwasi-emulated-signal \
-          -lwasi-emulated-process-clocks \
-          -lsetjmp \
-          -lm
+LDFLAGS = -Wl,--no-entry           -Wl,--export=cabi_realloc           -Wl,--export=__wasm_call_ctors           -lwasi-emulated-signal           -lwasi-emulated-process-clocks           -lsetjmp           -lm
 ```
 
 The `-mllvm -wasm-enable-sjlj` flag instructs LLVM to lower `setjmp`/`longjmp` using WebAssembly Exception Handling opcodes (`try_table`, opcode `0x117`). This is the correct and expected output — do not suppress it with `-fno-exceptions` or `-mno-exception-handling`. MicroQuickJS uses `setjmp`/`longjmp` internally for JS exception recovery; suppressing EH lowering breaks those paths.
@@ -447,7 +435,7 @@ exports_local_microquickjs_engine_method_js_value_get_property(
     // WIT strings are not null-terminated, so we must copy.
     char *cname = malloc(name->len + 1);
     memcpy(cname, name->ptr, name->len);
-    cname[name->len] = '\0';
+    cname[name->len] = ' ';
     JSValue res = JS_GetPropertyStr(s_ctx, self->val, cname);
     free(cname);
     return make_own_value(res);
@@ -623,10 +611,7 @@ The `try_table` instruction (opcode `0x117`) is emitted by wasi-sdk clang as the
 ### WAMR build requirements
 
 ```bash
-cmake -DWAMR_BUILD_COMPONENT_MODEL=1 \
-      -DWAMR_BUILD_INTERP=1 \
-      -DWAMR_BUILD_FAST_INTERP=1 \
-      ..
+cmake -DWAMR_BUILD_COMPONENT_MODEL=1       -DWAMR_BUILD_INTERP=1       -DWAMR_BUILD_FAST_INTERP=1       ..
 make -j$(nproc)
 ```
 

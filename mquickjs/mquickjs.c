@@ -1,4 +1,3 @@
-/* WASI PATCHED */
 /*
  * Micro QuickJS Javascript Engine
  *
@@ -24,10 +23,8 @@
  * THE SOFTWARE.
  */
 #include <stdlib.h>
-#ifndef __wasi__
 #include <sys/wait.h>
 #include <signal.h>
-#endif
 #include <stdio.h>
 #include <stdarg.h>
 #include <inttypes.h>
