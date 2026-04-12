@@ -29,15 +29,11 @@
 #include <string.h>
 #include <assert.h>
 #include <math.h>
+#include <setjmp.h>
 #ifdef __wasi__
 #define getenv(x) NULL
 #define signal(x, y) (void)0
 #define system(x) (-1)
-typedef int jmp_buf[1];
-#define setjmp(env) (0)
-#define longjmp(env, val) abort()
-#else
-#include <setjmp.h>
 #endif
 
 #include "cutils.h"
