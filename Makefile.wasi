@@ -1,0 +1,78 @@
+WASI_SDK_PATH ?= /opt/wasi-sdk
+ADAPTER ?= wasi_snapshot_preview1.reactor.wasm
+
+CC = $(WASI_SDK_PATH)/bin/clang
+HOST_CC = gcc
+
+CFLAGS = -Oz \
+         --target=wasm32-wasi \
+         -D_WASI_EMULATED_SIGNAL \
+         -I. -Igenerated -Ibuild \
+         -mllvm -wasm-enable-sjlj
+
+
+LDFLAGS = -mexec-model=reactor \
+          -Wl,--export=cabi_realloc \
+          -Wl,--export=__wasm_call_ctors \
+          -lwasi-emulated-signal \
+          -lwasi-emulated-process-clocks \
+          -lsetjmp \
+          -lm
+
+HOST_CFLAGS = -O2 -I.
+
+BUILD_DIR = build
+GEN_DIR = generated
+
+CORE_WASM = $(BUILD_DIR)/core.wasm
+COMPONENT_WASM = $(BUILD_DIR)/microquickjs.component.wasm
+
+SRCS = glue.c \
+       mquickjs.c \
+       cutils.c \
+       dtoa.c \
+       libm.c \
+       $(GEN_DIR)/microquickjs.c
+
+OBJS = $(patsubst %.c, $(BUILD_DIR)/%.o, $(notdir $(SRCS)))
+
+all: $(COMPONENT_WASM)
+
+$(BUILD_DIR):
+	mkdir -p $(BUILD_DIR)
+
+# Native tool to generate stdlib
+$(BUILD_DIR)/mqjs_stdlib_native: mqjs_stdlib.c mquickjs_build.c cutils.c | $(BUILD_DIR)
+	$(HOST_CC) $(HOST_CFLAGS) -o $@ $^ -lm
+
+# Header generation
+$(BUILD_DIR)/mqjs_stdlib.h: $(BUILD_DIR)/mqjs_stdlib_native
+	./$(BUILD_DIR)/mqjs_stdlib_native -m32 > $@
+
+$(BUILD_DIR)/mquickjs_atom.h: $(BUILD_DIR)/mqjs_stdlib_native
+	./$(BUILD_DIR)/mqjs_stdlib_native -a -m32 > $@
+
+# Compilation
+$(BUILD_DIR)/%.o: %.c | $(BUILD_DIR)
+	$(CC) $(CFLAGS) -c -o $@ $<
+
+$(BUILD_DIR)/microquickjs.o: $(GEN_DIR)/microquickjs.c | $(BUILD_DIR)
+	$(CC) $(CFLAGS) -c -o $@ $<
+
+# Core WASM
+$(CORE_WASM): $(OBJS) $(GEN_DIR)/microquickjs_component_type.o
+	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
+
+# Component composition
+$(COMPONENT_WASM): $(CORE_WASM)
+	wasm-tools component embed ./microquickjs.wit --world microquickjs $(CORE_WASM) -o $(BUILD_DIR)/embedded.wasm
+	wasm-tools component new --skip-validation --adapt wasi_snapshot_preview1=$(ADAPTER) $(BUILD_DIR)/embedded.wasm -o $@
+
+# Dependencies
+$(BUILD_DIR)/glue.o: glue.c $(BUILD_DIR)/mqjs_stdlib.h
+$(BUILD_DIR)/mquickjs.o: mquickjs.c $(BUILD_DIR)/mquickjs_atom.h
+
+clean:
+	rm -rf $(BUILD_DIR) $(GEN_DIR)
+
+.PHONY: all clean
