@@ -40,8 +40,10 @@
 #else
 #include <signal.h>
 #include <unistd.h>
+#ifndef __wasi__
 #include <termios.h>
 #include <sys/ioctl.h>
+#endif
 #endif
 
 #include "readline_tty.h"
@@ -104,6 +106,13 @@ static void set_processed_input(BOOL enable)
     else
         mode &= ~ENABLE_PROCESSED_INPUT;
     SetConsoleMode(handle, mode);
+}
+
+#elif defined(__wasi__)
+
+int readline_tty_init(void)
+{
+    return 80;
 }
 
 #else
@@ -185,6 +194,17 @@ void term_flush(void)
 const char *readline_tty(ReadlineState *s,
                          const char *prompt, BOOL multi_line)
 {
+#if defined(__wasi__)
+    printf("%s", prompt);
+    fflush(stdout);
+    if (fgets((char *)s->term_cmd_buf, s->term_cmd_buf_size, stdin)) {
+        size_t len = strlen((char *)s->term_cmd_buf);
+        if (len > 0 && s->term_cmd_buf[len - 1] == '\n')
+            s->term_cmd_buf[len - 1] = '\0';
+        return (const char *)s->term_cmd_buf;
+    }
+    return NULL;
+#else
     int len, i, ctrl_c_count, c, ret;
     const char *ret_str;
     uint8_t buf[128];
@@ -235,6 +255,7 @@ done:
     set_processed_input(TRUE);
 #endif
     return ret_str;
+#endif
 }
 
 BOOL readline_is_interrupted(void)
