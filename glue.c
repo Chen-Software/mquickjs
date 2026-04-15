@@ -123,7 +123,6 @@ void exports_local_microquickjs_engine_method_js_value_to_string(
     JSCStringBuf buf;
     const char *cstr = JS_ToCStringLen(s_ctx, &len, self->val, &buf);
     if (!cstr) {
-        // Return an empty string instead of NULL to avoid ABI traps
         ret->ptr = cabi_realloc(NULL, 0, 1, 1);
         ret->ptr[0] = '\0';
         ret->len = 0;
