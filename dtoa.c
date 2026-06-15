@@ -33,7 +33,7 @@
 #include "cutils.h"
 #include "dtoa.h"
 
-/* 
+/*
    TODO:
    - test n_digits=101 instead of 100
    - simplify subnormal handling

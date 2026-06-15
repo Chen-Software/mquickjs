@@ -1,0 +1,76 @@
+WASI_SDK_PATH ?= /opt/wasi-sdk
+CC = $(WASI_SDK_PATH)/bin/clang
+ADAPTER ?= wasi_snapshot_preview1.reactor.wasm
+
+# -mexec-model is only valid for linking, not compilation
+CFLAGS = -Oz -D_WASI_EMULATED_SIGNAL -D_WASI_EMULATED_PROCESS_CLOCKS \
+         -Werror=implicit-function-declaration -fno-math-errno -fno-trapping-math \
+         --target=wasm32-wasi -mllvm -wasm-enable-sjlj
+
+LDFLAGS = --target=wasm32-wasi -mexec-model=reactor \
+          -Wl,--no-entry -Wl,--export=cabi_realloc -Wl,--export=__wasm_call_ctors \
+          -lwasi-emulated-signal -lwasi-emulated-process-clocks -lsetjmp -lm
+
+BUILD_DIR = build
+GEN_DIR = generated
+
+OBJS = $(BUILD_DIR)/mquickjs.o $(BUILD_DIR)/cutils.o $(BUILD_DIR)/dtoa.o $(BUILD_DIR)/libm.o \
+       $(BUILD_DIR)/microquickjs.o $(BUILD_DIR)/glue.o $(BUILD_DIR)/wasi_preview1_stubs.o
+
+all: $(BUILD_DIR)/microquickjs.component.wasm
+
+$(BUILD_DIR):
+	mkdir -p $(BUILD_DIR)
+
+# Native build tool to generate stdlib headers
+mquickjs_build_native: mquickjs_build.c mqjs_stdlib.c cutils.c
+	gcc -O2 -Wall -I. $^ -o $@ -lm
+
+$(BUILD_DIR)/mquickjs_atom.h: mquickjs_build_native | $(BUILD_DIR)
+	./mquickjs_build_native -a -m32 > $@
+
+$(BUILD_DIR)/mqjs_stdlib.h: mquickjs_build_native | $(BUILD_DIR)
+	./mquickjs_build_native -m32 > $@
+
+headers: $(BUILD_DIR)/mquickjs_atom.h $(BUILD_DIR)/mqjs_stdlib.h
+
+# wit-bindgen code generation
+$(GEN_DIR)/microquickjs.c $(GEN_DIR)/microquickjs.h: microquickjs.wit
+	mkdir -p $(GEN_DIR)
+	wit-bindgen c microquickjs.wit --out-dir $(GEN_DIR) --world microquickjs
+
+# Wasm object files
+$(BUILD_DIR)/mquickjs.o: mquickjs.c $(BUILD_DIR)/mquickjs_atom.h $(BUILD_DIR)/mqjs_stdlib.h | $(BUILD_DIR)
+	$(CC) $(CFLAGS) -I. -I$(BUILD_DIR) -c $< -o $@
+
+$(BUILD_DIR)/cutils.o: cutils.c | $(BUILD_DIR)
+	$(CC) $(CFLAGS) -I. -c $< -o $@
+
+$(BUILD_DIR)/dtoa.o: dtoa.c | $(BUILD_DIR)
+	$(CC) $(CFLAGS) -I. -c $< -o $@
+
+$(BUILD_DIR)/libm.o: libm.c | $(BUILD_DIR)
+	$(CC) $(CFLAGS) -I. -c $< -o $@
+
+$(BUILD_DIR)/microquickjs.o: $(GEN_DIR)/microquickjs.c | $(BUILD_DIR)
+	$(CC) $(CFLAGS) -I$(GEN_DIR) -c $< -o $@
+
+$(BUILD_DIR)/glue.o: glue.c $(GEN_DIR)/microquickjs.h $(BUILD_DIR)/mqjs_stdlib.h | $(BUILD_DIR)
+	$(CC) $(CFLAGS) -I. -I$(GEN_DIR) -I$(BUILD_DIR) -c $< -o $@
+
+$(BUILD_DIR)/wasi_preview1_stubs.o: wasi_preview1_stubs.c | $(BUILD_DIR)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+# Core Wasm module
+$(BUILD_DIR)/core.wasm: $(OBJS) $(GEN_DIR)/microquickjs.c
+	$(CC) $(OBJS) $(GEN_DIR)/microquickjs_component_type.o $(LDFLAGS) -o $@
+
+# Final Component
+$(BUILD_DIR)/microquickjs.component.wasm: $(BUILD_DIR)/core.wasm microquickjs.wit $(ADAPTER)
+	wasm-tools component embed ./microquickjs.wit $< --world microquickjs --output $(BUILD_DIR)/embedded.wasm
+	wasm-tools component new $(BUILD_DIR)/embedded.wasm --adapt wasi_snapshot_preview1=$(ADAPTER) --output $@
+
+clean:
+	rm -rf $(BUILD_DIR) $(GEN_DIR) mquickjs_build_native
+
+.PHONY: all headers clean

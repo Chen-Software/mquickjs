@@ -30,6 +30,11 @@
 #include <assert.h>
 #include <math.h>
 #include <setjmp.h>
+#ifdef __wasi__
+#define getenv(x) NULL
+#define signal(x, y) (void)0
+#define system(x) (-1)
+#endif
 
 #include "cutils.h"
 #include "dtoa.h"
