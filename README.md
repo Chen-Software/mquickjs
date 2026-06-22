@@ -376,3 +376,23 @@ MQuickJS is released under the MIT license.
 Unless otherwise specified, the MQuickJS sources are copyright Fabrice
 Bellard and Charlie Gordon.
 
+
+## WASI Component build
+
+Build the WASI 0.2 component using `Makefile.wasi`:
+
+```bash
+make -f Makefile.wasi
+```
+
+Run the basic tests using the `wasm32-wasip2` build binary executable:
+
+```bash
+make -f Makefile.wasi test
+```
+
+Running the QuickJS micro benchmark:
+
+```bash
+make -f Makefile.wasi microbench
+```

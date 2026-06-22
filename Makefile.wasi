@@ -1,0 +1,103 @@
+WASI_SDK_PATH ?= /opt/wasi-sdk
+ADAPTER ?= wasi_snapshot_preview1.reactor.wasm
+
+CC = $(WASI_SDK_PATH)/bin/clang
+HOST_CC = gcc
+
+# Component build flags
+CFLAGS = -Oz \
+         --target=wasm32-wasi \
+         -D_WASI_EMULATED_SIGNAL \
+         -Ibuild -Igenerated -I. \
+         -mllvm -wasm-enable-sjlj
+
+LDFLAGS = -mexec-model=reactor \
+          -Wl,--export=cabi_realloc \
+          -Wl,--export=__wasm_call_ctors \
+          -lwasi-emulated-signal \
+          -lwasi-emulated-process-clocks \
+          -lsetjmp \
+          -lm
+
+# CLI build flags (for tests)
+CLI_CFLAGS = -Oz -mllvm -wasm-enable-sjlj \
+             --target=wasm32-wasip2 \
+             -Ibuild -I.
+
+CLI_LDFLAGS = -lm -lsetjmp
+
+BUILD_DIR = build
+GEN_DIR = generated
+
+CORE_WASM = $(BUILD_DIR)/core.wasm
+COMPONENT_WASM = $(BUILD_DIR)/microquickjs.component.wasm
+CLI_WASM = $(BUILD_DIR)/mqjs.wasm
+
+SRCS = glue.c \
+       mquickjs.c \
+       cutils.c \
+       dtoa.c \
+       libm.c \
+       $(GEN_DIR)/microquickjs.c
+
+OBJS = $(patsubst %.c, $(BUILD_DIR)/%.o, $(notdir $(SRCS)))
+
+all: $(COMPONENT_WASM) $(CLI_WASM)
+
+$(BUILD_DIR):
+	mkdir -p $(BUILD_DIR)
+
+# Header generation
+$(BUILD_DIR)/mqjs_stdlib.h: mqjs_stdlib.c mquickjs_build.c cutils.c | $(BUILD_DIR)
+	$(HOST_CC) -O2 -I. -o $(BUILD_DIR)/mqjs_stdlib_native $^ -lm
+	./$(BUILD_DIR)/mqjs_stdlib_native -m32 > $@
+
+$(BUILD_DIR)/mquickjs_atom.h: mqjs_stdlib.c mquickjs_build.c cutils.c | $(BUILD_DIR)
+	$(HOST_CC) -O2 -I. -o $(BUILD_DIR)/mqjs_stdlib_native $^ -lm
+	./$(BUILD_DIR)/mqjs_stdlib_native -a -m32 > $@
+
+# Component Object Compilation
+$(BUILD_DIR)/%.o: %.c | $(BUILD_DIR)
+	$(CC) $(CFLAGS) -c -o $@ $<
+
+$(BUILD_DIR)/microquickjs.o: $(GEN_DIR)/microquickjs.c | $(BUILD_DIR)
+	$(CC) $(CFLAGS) -c -o $@ $<
+
+# Core WASM
+$(CORE_WASM): $(OBJS) $(GEN_DIR)/microquickjs_component_type.o
+	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
+
+# Component composition
+$(COMPONENT_WASM): $(CORE_WASM)
+	wasm-tools component embed ./microquickjs.wit --world microquickjs $(CORE_WASM) -o $(BUILD_DIR)/embedded.wasm
+	wasm-tools component new --skip-validation --adapt wasi_snapshot_preview1=$(ADAPTER) $(BUILD_DIR)/embedded.wasm -o $@
+
+# CLI WASM (wasip2)
+CLI_SRCS = mqjs.c mquickjs.c dtoa.c libm.c cutils.c readline_tty_wasi.c readline.c
+CLI_OBJS = $(patsubst %.c, $(BUILD_DIR)/%_cli.o, $(CLI_SRCS))
+
+$(BUILD_DIR)/%_cli.o: %.c | $(BUILD_DIR)
+	$(CC) $(CLI_CFLAGS) -c -o $@ $<
+
+$(CLI_WASM): $(CLI_OBJS)
+	$(CC) $(CLI_CFLAGS) -o $@ $^ $(CLI_LDFLAGS)
+
+# Dependencies
+$(BUILD_DIR)/glue.o: glue.c $(BUILD_DIR)/mqjs_stdlib.h
+$(BUILD_DIR)/mquickjs.o: mquickjs.c $(BUILD_DIR)/mquickjs_atom.h
+$(BUILD_DIR)/mquickjs_cli.o: mquickjs.c $(BUILD_DIR)/mquickjs_atom.h
+$(BUILD_DIR)/mqjs_cli.o: mqjs.c $(BUILD_DIR)/mqjs_stdlib.h
+
+test: $(CLI_WASM)
+	wasmtime run -W all-proposals=y --wasi cli=y $(CLI_WASM) tests/test_closure.js
+	wasmtime run -W all-proposals=y --wasi cli=y $(CLI_WASM) tests/test_language.js
+	wasmtime run -W all-proposals=y --wasi cli=y $(CLI_WASM) tests/test_loop.js
+	wasmtime run -W all-proposals=y --wasi cli=y $(CLI_WASM) tests/test_builtin.js
+
+microbench: $(CLI_WASM)
+	wasmtime run -W all-proposals=y --wasi cli=y $(CLI_WASM) tests/microbench.js
+
+clean:
+	rm -rf $(BUILD_DIR) $(GEN_DIR)
+
+.PHONY: all clean test microbench
